@@ -151,7 +151,7 @@ struct CodexLimitsReader {
             "params": [
                 "clientInfo": [
                     "name": "codex-limits-widget",
-                    "version": "0.3.1"
+                    "version": "0.3.2"
                 ],
                 "capabilities": [
                     "experimentalApi": true
@@ -725,14 +725,19 @@ struct CodexCircularLimitsWidgetView: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.secondary.opacity(0.18), lineWidth: 12)
+                .trim(from: arcStart, to: arcStart + arcSpan)
+                .stroke(
+                    Color.secondary.opacity(0.18),
+                    style: StrokeStyle(lineWidth: 18, lineCap: .round)
+                )
+                .rotationEffect(.degrees(90))
             Circle()
-                .trim(from: 0, to: progress)
+                .trim(from: arcStart, to: arcStart + arcSpan * progress)
                 .stroke(
                     tint,
-                    style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                    style: StrokeStyle(lineWidth: 18, lineCap: .round)
                 )
-                .rotationEffect(.degrees(-90))
+                .rotationEffect(.degrees(90))
 
             if let error = entry.limits.error {
                 Text(error)
@@ -742,33 +747,32 @@ struct CodexCircularLimitsWidgetView: View {
                     .lineLimit(4)
                     .padding(24)
             } else if let window {
-                VStack(spacing: 1) {
-                    HStack(spacing: 4) {
-                        Text(window.name.uppercased())
-                            .foregroundStyle(.secondary)
-                        if let plan = entry.limits.plan {
-                            Text("·")
-                                .foregroundStyle(.tertiary)
-                            Text(plan.uppercased())
-                                .foregroundStyle(.blue)
-                        }
-                    }
+                VStack(spacing: 0) {
+                    Text(window.name.uppercased())
                     .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
 
+                    Text("\(window.remainingPercent ?? 0)%")
+                        .font(.system(size: 31, weight: .bold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(tint)
+                        .lineLimit(1)
+                    Text("LEFT")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(.secondary)
+
                     Text(resetCountdown)
-                        .font(.title2.weight(.bold).monospacedDigit())
+                        .font(.system(size: 19, weight: .bold).monospacedDigit())
                         .minimumScaleFactor(0.75)
                         .lineLimit(1)
                     Text("Resets In")
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.secondary)
 
-                    Text("\(window.remainingPercent ?? 0)% Left")
-                        .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(tint)
-
                     if let credits = entry.limits.resetCredits {
+                        Text("Full Resets")
+                            .font(.system(size: 8, weight: .semibold))
+                            .padding(.top, 3)
                         Text(resetCreditText(credits))
                             .font(.system(size: 8, weight: .medium).monospacedDigit())
                             .foregroundStyle(.secondary)
@@ -779,17 +783,22 @@ struct CodexCircularLimitsWidgetView: View {
                     Text("Updated \(entry.limits.updatedAt, style: .time)")
                         .font(.system(size: 7))
                         .foregroundStyle(.tertiary)
+                        .padding(.top, 2)
                 }
-                .padding(20)
+                .padding(.horizontal, 19)
+                .padding(.vertical, 17)
             } else {
                 Text("No usage window")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(5)
+        .padding(-2)
         .containerBackground(.background, for: .widget)
     }
+
+    private let arcStart = 0.125
+    private let arcSpan = 0.75
 
     private var window: LimitWindow? {
         entry.limits.windows.first

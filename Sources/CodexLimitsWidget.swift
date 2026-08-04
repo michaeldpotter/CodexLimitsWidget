@@ -151,7 +151,7 @@ struct CodexLimitsReader {
             "params": [
                 "clientInfo": [
                     "name": "codex-limits-widget",
-                    "version": "0.3.3"
+                    "version": "0.3.4"
                 ],
                 "capabilities": [
                     "experimentalApi": true
@@ -728,20 +728,16 @@ struct CodexCircularLimitsWidgetView: View {
                 .trim(from: arcStart, to: arcStart + arcSpan)
                 .stroke(
                     Color.secondary.opacity(0.18),
-                    style: StrokeStyle(lineWidth: 24, lineCap: .round)
+                    style: StrokeStyle(lineWidth: 20, lineCap: .round)
                 )
                 .rotationEffect(.degrees(90))
             Circle()
                 .trim(from: arcStart, to: arcStart + arcSpan * progress)
                 .stroke(
                     tint,
-                    style: StrokeStyle(lineWidth: 24, lineCap: .round)
+                    style: StrokeStyle(lineWidth: 20, lineCap: .round)
                 )
                 .rotationEffect(.degrees(90))
-
-            if window != nil {
-                percentageOnArc
-            }
 
             if let error = entry.limits.error {
                 Text(error)
@@ -751,14 +747,17 @@ struct CodexCircularLimitsWidgetView: View {
                     .lineLimit(4)
                     .padding(24)
             } else if let window {
-                VStack(spacing: 0) {
-                    Text(window.name.uppercased())
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                VStack(spacing: 1) {
+                    Text("\(window.remainingPercent ?? 0)%")
+                        .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(tint)
+                        .lineLimit(1)
+                    Text("LEFT")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
 
                     Text(resetCountdown)
-                        .font(.system(size: 19, weight: .bold).monospacedDigit())
+                        .font(.system(size: 21, weight: .bold).monospacedDigit())
                         .minimumScaleFactor(0.75)
                         .lineLimit(1)
                     Text("Resets In")
@@ -781,36 +780,20 @@ struct CodexCircularLimitsWidgetView: View {
                         .foregroundStyle(.tertiary)
                         .padding(.top, 2)
                 }
-                .padding(.horizontal, 19)
-                .padding(.vertical, 17)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 18)
             } else {
                 Text("No usage window")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(-2)
+        .padding(1)
         .containerBackground(.background, for: .widget)
     }
 
     private let arcStart = 0.125
     private let arcSpan = 0.75
-
-    private var percentageOnArc: some View {
-        GeometryReader { geometry in
-            let size = min(geometry.size.width, geometry.size.height)
-            let radius = size / 2 - 12
-            let angle = (135 + 270 * progress / 2) * Double.pi / 180
-            Text("\(window?.remainingPercent ?? 0)%")
-                .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .position(
-                    x: geometry.size.width / 2 + cos(angle) * radius,
-                    y: geometry.size.height / 2 + sin(angle) * radius
-                )
-        }
-    }
 
     private var window: LimitWindow? {
         entry.limits.windows.first
@@ -848,7 +831,7 @@ struct CodexCircularLimitsWidgetView: View {
         guard !dates.isEmpty else { return "\(summary.availableCount) \(noun)" }
         let moreCount = max(0, summary.availableCount - dates.count)
         let moreText = moreCount > 0 ? " +\(moreCount)" : ""
-        return "\(summary.availableCount) \(noun) · \(dates.joined(separator: ", "))\(moreText)"
+        return "\(summary.availableCount) \(noun) · Exp \(dates.joined(separator: ", "))\(moreText)"
     }
 }
 

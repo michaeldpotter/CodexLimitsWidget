@@ -540,7 +540,7 @@ struct CodexLimitsWidgetView: View {
                         .foregroundStyle(.secondary)
                 }
                 if let credits = entry.limits.resetCredits {
-                    ResetCreditRow(summary: credits, displayStyle: resetDisplayStyle)
+                    ResetCreditRow(summary: credits)
                 }
                 if let status = entry.limits.status {
                     Text(status.replacingOccurrences(of: "_", with: " "))
@@ -601,7 +601,6 @@ struct CodexLimitsWidgetView: View {
 
 struct ResetCreditRow: View {
     let summary: ResetCreditSummary
-    let displayStyle: ResetDisplayStyle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -616,7 +615,6 @@ struct ResetCreditRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .padding(.leading, 22)
         }
     }
 
@@ -626,15 +624,9 @@ struct ResetCreditRow: View {
         guard let expiration = summary.nextExpiration else {
             return countText
         }
-        switch displayStyle {
-        case .relative:
-            let days = max(0, Int(expiration.timeIntervalSinceNow) / 86_400)
-            return "\(countText) · expires in \(days)d"
-        case .absolute:
-            let formatter = DateFormatter()
-            formatter.setLocalizedDateFormatFromTemplate("MMM d")
-            return "\(countText) · expires \(formatter.string(from: expiration))"
-        }
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return "\(countText) · expires \(formatter.string(from: expiration))"
     }
 }
 

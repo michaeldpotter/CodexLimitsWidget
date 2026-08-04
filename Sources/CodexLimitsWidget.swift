@@ -15,25 +15,38 @@ struct LimitWindow {
     }
 }
 
+struct ResetCreditSummary {
+    let availableCount: Int
+    let nextExpiration: Date?
+}
+
 struct CodexLimits {
     let plan: String?
-    let primary: LimitWindow?
-    let secondary: LimitWindow?
+    let windows: [LimitWindow]
+    let resetCredits: ResetCreditSummary?
+    let status: String?
     let updatedAt: Date
     let error: String?
 
     static let placeholder = CodexLimits(
         plan: "plus",
-        primary: LimitWindow(
-            name: "5h",
-            usedPercent: 24,
-            resetDate: Date().addingTimeInterval(3 * 60 * 60 + 25 * 60)
+        windows: [
+            LimitWindow(
+                name: "5h",
+                usedPercent: 24,
+                resetDate: Date().addingTimeInterval(3 * 60 * 60 + 25 * 60)
+            ),
+            LimitWindow(
+                name: "weekly",
+                usedPercent: 10,
+                resetDate: Date().addingTimeInterval(6 * 24 * 60 * 60 + 8 * 60 * 60)
+            )
+        ],
+        resetCredits: ResetCreditSummary(
+            availableCount: 2,
+            nextExpiration: Date().addingTimeInterval(8 * 24 * 60 * 60)
         ),
-        secondary: LimitWindow(
-            name: "weekly",
-            usedPercent: 10,
-            resetDate: Date().addingTimeInterval(6 * 24 * 60 * 60 + 8 * 60 * 60)
-        ),
+        status: nil,
         updatedAt: Date(),
         error: nil
     )
@@ -73,13 +86,13 @@ struct CodexLimitsReader {
         do {
             let codexPath = try findCodex()
             let result = try callCodexAppServer(codexPath: codexPath)
-            let bucket = pickCodexBucket(from: result)
-            return parseLimits(from: bucket)
+            return parseLimits(from: result)
         } catch {
             return CodexLimits(
                 plan: nil,
-                primary: nil,
-                secondary: nil,
+                windows: [],
+                resetCredits: nil,
+                status: nil,
                 updatedAt: Date(),
                 error: String(describing: error)
             )
@@ -135,7 +148,7 @@ struct CodexLimitsReader {
             "params": [
                 "clientInfo": [
                     "name": "codex-limits-widget",
-                    "version": "0.2.2"
+                    "version": "0.3.0"
                 ],
                 "capabilities": [
                     "experimentalApi": true
@@ -266,27 +279,65 @@ struct CodexLimitsReader {
         handle.write(Data((string + "\n").utf8))
     }
 
-    private static func pickCodexBucket(from result: [String: Any]) -> [String: Any] {
-        if
-            let buckets = result["rateLimitsByLimitId"] as? [String: Any],
-            let codex = buckets["codex"] as? [String: Any]
-        {
-            return codex
-        }
-        return (result["rateLimits"] as? [String: Any]) ?? result
-    }
+    private static func parseLimits(from result: [String: Any]) -> CodexLimits {
+        let buckets = parsedBuckets(from: result)
+        let codexBucket = buckets.first(where: { $0.id == "codex" })?.value
+            ?? (result["rateLimits"] as? [String: Any])
+            ?? result
+        var windows: [LimitWindow] = []
+        var statuses: [String] = []
 
-    private static func parseLimits(from bucket: [String: Any]) -> CodexLimits {
-        CodexLimits(
-            plan: bucket["planType"] as? String,
-            primary: parseWindow(bucket["primary"], fallbackName: "5h"),
-            secondary: parseWindow(bucket["secondary"], fallbackName: "weekly"),
+        for bucket in buckets {
+            let prefix = bucket.id == "codex" ? nil : compactBucketName(bucket.value, fallback: bucket.id)
+            if let primary = parseWindow(bucket.value["primary"], fallbackName: "primary", prefix: prefix) {
+                windows.append(primary)
+            }
+            if let secondary = parseWindow(bucket.value["secondary"], fallbackName: "secondary", prefix: prefix) {
+                windows.append(secondary)
+            }
+            if let status = bucket.value["rateLimitReachedType"] as? String {
+                statuses.append(status)
+            }
+        }
+
+        return CodexLimits(
+            plan: codexBucket["planType"] as? String,
+            windows: windows,
+            resetCredits: parseResetCredits(result["rateLimitResetCredits"]),
+            status: statuses.first,
             updatedAt: Date(),
             error: nil
         )
     }
 
-    private static func parseWindow(_ value: Any?, fallbackName: String) -> LimitWindow? {
+    private static func parsedBuckets(from result: [String: Any]) -> [(id: String, value: [String: Any])] {
+        if let rawBuckets = result["rateLimitsByLimitId"] as? [String: Any] {
+            return rawBuckets.compactMap { id, value in
+                guard let bucket = value as? [String: Any] else {
+                    return nil
+                }
+                return (id: id, value: bucket)
+            }.sorted { left, right in
+                if left.id == "codex" { return true }
+                if right.id == "codex" { return false }
+                return left.id.localizedCaseInsensitiveCompare(right.id) == .orderedAscending
+            }
+        }
+        let fallback = (result["rateLimits"] as? [String: Any]) ?? result
+        return [(id: "codex", value: fallback)]
+    }
+
+    private static func compactBucketName(_ bucket: [String: Any], fallback: String) -> String {
+        let name = (bucket["limitName"] as? String) ?? fallback
+        if name.localizedCaseInsensitiveContains("spark") {
+            return "Spark"
+        }
+        return name
+            .replacingOccurrences(of: "GPT-", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "Codex-", with: "", options: .caseInsensitive)
+    }
+
+    private static func parseWindow(_ value: Any?, fallbackName: String, prefix: String?) -> LimitWindow? {
         guard let dict = value as? [String: Any] else {
             return nil
         }
@@ -306,11 +357,26 @@ struct CodexLimitsReader {
         default:
             name = fallbackName
         }
+        let displayName = prefix.map { "\($0) \(name)" } ?? name
         let resetDate = number(dict["resetsAt"]).map { Date(timeIntervalSince1970: TimeInterval($0)) }
         return LimitWindow(
-            name: name,
+            name: displayName,
             usedPercent: number(dict["usedPercent"]),
             resetDate: resetDate
+        )
+    }
+
+    private static func parseResetCredits(_ value: Any?) -> ResetCreditSummary? {
+        guard let dict = value as? [String: Any], let count = number(dict["availableCount"]) else {
+            return nil
+        }
+        let expirations = (dict["credits"] as? [[String: Any]] ?? [])
+            .compactMap { number($0["expiresAt"]) }
+            .map { Date(timeIntervalSince1970: TimeInterval($0)) }
+            .filter { $0 > Date() }
+        return ResetCreditSummary(
+            availableCount: count,
+            nextExpiration: expirations.min()
         )
     }
 
@@ -467,11 +533,20 @@ struct CodexLimitsWidgetView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(4)
             } else {
-                if let primary = entry.limits.primary {
-                    LimitRow(window: primary, resetDisplayStyle: resetDisplayStyle)
+                windowsView
+                if visibleWindows.isEmpty {
+                    Text("No usage windows returned")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                if let secondary = entry.limits.secondary {
-                    LimitRow(window: secondary, resetDisplayStyle: resetDisplayStyle)
+                if let credits = entry.limits.resetCredits {
+                    ResetCreditRow(summary: credits, displayStyle: resetDisplayStyle)
+                }
+                if let status = entry.limits.status {
+                    Text(status.replacingOccurrences(of: "_", with: " "))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 Text("Updated \(entry.limits.updatedAt, style: .time)")
@@ -484,6 +559,31 @@ struct CodexLimitsWidgetView: View {
         .containerBackground(.background, for: .widget)
     }
 
+    @ViewBuilder
+    private var windowsView: some View {
+        if family == .systemMedium {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(Array(visibleWindows.enumerated()), id: \.offset) { _, window in
+                    LimitRow(window: window, resetDisplayStyle: resetDisplayStyle)
+                }
+            }
+        } else {
+            ForEach(Array(visibleWindows.enumerated()), id: \.offset) { _, window in
+                LimitRow(window: window, resetDisplayStyle: resetDisplayStyle)
+            }
+        }
+    }
+
+    private var visibleWindows: [LimitWindow] {
+        let maximum: Int
+        if family == .systemSmall {
+            maximum = entry.limits.resetCredits == nil ? 2 : 1
+        } else {
+            maximum = 4
+        }
+        return Array(entry.limits.windows.prefix(maximum))
+    }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Codex")
@@ -494,6 +594,41 @@ struct CodexLimitsWidgetView: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.blue)
             }
+        }
+    }
+}
+
+struct ResetCreditRow: View {
+    let summary: ResetCreditSummary
+    let displayStyle: ResetDisplayStyle
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "arrow.counterclockwise.circle")
+                .foregroundStyle(.blue)
+            Text("Full resets")
+                .font(.caption.weight(.semibold))
+            Spacer(minLength: 4)
+            Text(detailText)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private var detailText: String {
+        let countText = "\(summary.availableCount)"
+        guard let expiration = summary.nextExpiration else {
+            return countText
+        }
+        switch displayStyle {
+        case .relative:
+            let days = max(0, Int(expiration.timeIntervalSinceNow) / 86_400)
+            return "\(countText) · exp \(days)d"
+        case .absolute:
+            let formatter = DateFormatter()
+            formatter.setLocalizedDateFormatFromTemplate("MMM d")
+            return "\(countText) · exp \(formatter.string(from: expiration))"
         }
     }
 }
@@ -591,8 +726,8 @@ struct CodexLimitsWidget: Widget {
             CodexLimitsWidgetView(entry: entry, resetDisplayStyle: .relative)
         }
         .configurationDisplayName("Codex Limits")
-        .description("Shows the remaining Codex 5-hour and weekly limits.")
-        .supportedFamilies([.systemSmall])
+        .description("Shows Codex usage buckets and available Full Reset credits.")
+        .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
 
@@ -604,8 +739,8 @@ struct CodexLimitsResetTimesWidget: Widget {
             CodexLimitsWidgetView(entry: entry, resetDisplayStyle: .absolute)
         }
         .configurationDisplayName("Codex Reset Times")
-        .description("Shows when the Codex 5-hour and weekly limits reset.")
-        .supportedFamilies([.systemSmall])
+        .description("Shows Codex usage reset times and available Full Reset credits.")
+        .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
 

@@ -23,7 +23,7 @@ struct CodexLimitsHostApp: App {
 
 @MainActor
 enum AboutPanel {
-    private static let repositoryURL = URL(string: "https://github.com/testpassword/CodexLimitsWidget")!
+    private static let repositoryURL = URL(string: "https://github.com/michaeldpotter/CodexLimitsWidget")!
 
     static func show() {
         NSApp.orderFrontStandardAboutPanel(options: [
@@ -36,11 +36,11 @@ enum AboutPanel {
     }
 
     private static var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.2.2"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.3.0"
     }
 
     private static var buildVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "4"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "5"
     }
 
     private static var credits: NSAttributedString {

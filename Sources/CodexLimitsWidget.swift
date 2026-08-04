@@ -151,7 +151,7 @@ struct CodexLimitsReader {
             "params": [
                 "clientInfo": [
                     "name": "codex-limits-widget",
-                    "version": "0.3.6"
+                    "version": "0.3.7"
                 ],
                 "capabilities": [
                     "experimentalApi": true
@@ -719,125 +719,6 @@ struct LimitRow: View {
     }
 }
 
-struct CodexCircularLimitsWidgetView: View {
-    let entry: CodexLimitsEntry
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .trim(from: arcStart, to: arcStart + arcSpan)
-                .stroke(
-                    Color.secondary.opacity(0.18),
-                    style: StrokeStyle(lineWidth: 20, lineCap: .round)
-                )
-                .rotationEffect(.degrees(90))
-                .offset(y: -10)
-            Circle()
-                .trim(from: arcStart, to: arcStart + arcSpan * progress)
-                .stroke(
-                    tint,
-                    style: StrokeStyle(lineWidth: 20, lineCap: .round)
-                )
-                .rotationEffect(.degrees(90))
-                .offset(y: -10)
-
-            if let error = entry.limits.error {
-                Text(error)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(4)
-                    .padding(24)
-            } else if let window {
-                VStack(spacing: 1) {
-                    Text("\(window.remainingPercent ?? 0)%")
-                        .font(.system(size: 36, weight: .bold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(tint)
-                        .lineLimit(1)
-                    Text("LEFT")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
-
-                    Text(resetCountdown)
-                        .font(.system(size: 21, weight: .bold).monospacedDigit())
-                        .minimumScaleFactor(0.75)
-                        .lineLimit(1)
-                    Text("Resets In")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    if let credits = entry.limits.resetCredits {
-                        Text("Full Resets")
-                            .font(.system(size: 8, weight: .semibold))
-                            .padding(.top, 3)
-                        Text(resetCreditText(credits))
-                            .font(.system(size: 8, weight: .medium).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .minimumScaleFactor(0.7)
-                            .lineLimit(1)
-                    }
-
-                    Text("Updated \(entry.limits.updatedAt, style: .time)")
-                        .font(.system(size: 7))
-                        .foregroundStyle(.tertiary)
-                        .padding(.top, 2)
-                }
-                .padding(.horizontal, 22)
-                .padding(.vertical, 18)
-                .offset(y: 12)
-            } else {
-                Text("No usage window")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(1)
-        .containerBackground(.background, for: .widget)
-    }
-
-    private let arcStart = 0.125
-    private let arcSpan = 0.75
-
-    private var window: LimitWindow? {
-        entry.limits.windows.first
-    }
-
-    private var progress: Double {
-        Double(window?.remainingPercent ?? 0) / 100
-    }
-
-    private var tint: Color {
-        guard let remaining = window?.remainingPercent else { return .gray }
-        if remaining <= 15 { return .red }
-        if remaining <= 35 { return .orange }
-        return .green
-    }
-
-    private var resetCountdown: String {
-        guard let resetDate = window?.resetDate else { return "Unknown" }
-        let seconds = max(0, Int(resetDate.timeIntervalSinceNow))
-        let days = seconds / 86_400
-        let hours = (seconds % 86_400) / 3_600
-        let minutes = (seconds % 3_600) / 60
-        if days > 0 { return "\(days)d \(hours)h" }
-        if hours > 0 { return "\(hours)h \(minutes)m" }
-        return "\(minutes)m"
-    }
-
-    private func resetCreditText(_ summary: ResetCreditSummary) -> String {
-        guard summary.availableCount > 0 else { return "No Full Resets" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "MM/dd"
-        let dates = summary.expirations.prefix(2).map { formatter.string(from: $0) }
-        let noun = summary.availableCount == 1 ? "Reset" : "Resets"
-        guard !dates.isEmpty else { return "\(summary.availableCount) \(noun)" }
-        let moreCount = max(0, summary.availableCount - dates.count)
-        let moreText = moreCount > 0 ? " +\(moreCount)" : ""
-        return "\(summary.availableCount) \(noun) · Exp \(dates.joined(separator: ", "))\(moreText)"
-    }
-}
-
 struct CodexLimitsWidget: Widget {
     let kind = "CodexLimitsWidget"
 
@@ -864,24 +745,10 @@ struct CodexLimitsResetTimesWidget: Widget {
     }
 }
 
-struct CodexCircularLimitsWidget: Widget {
-    let kind = "CodexCircularLimitsWidget"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: CodexLimitsProvider()) { entry in
-            CodexCircularLimitsWidgetView(entry: entry)
-        }
-        .configurationDisplayName("Codex Limits Ring")
-        .description("Shows remaining Codex usage as a circular gauge with reset details inside.")
-        .supportedFamilies([.systemSmall])
-    }
-}
-
 @main
 struct CodexLimitsWidgetBundle: WidgetBundle {
     var body: some Widget {
         CodexLimitsWidget()
         CodexLimitsResetTimesWidget()
-        CodexCircularLimitsWidget()
     }
 }

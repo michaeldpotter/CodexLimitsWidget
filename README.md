@@ -56,11 +56,8 @@ The script:
 After installation, open the macOS widget gallery and search for `Codex Limits`.
 The app provides small and medium versions of `Codex Limits`, which shows
 relative reset times, and `Codex Reset Times`, which shows the clock time or
-date when limits reset. `Codex Limits Ring` is an additional small widget that
-shows the primary limit as a circular gauge with its reset countdown and Full
-Reset details inside. The list widgets show every usage bucket returned by
-Codex. When available, all variants also show Full Reset credits and their
-expirations.[^gatekeeper]
+date when limits reset. Both widgets show every usage bucket returned by Codex.
+When available, they also show Full Reset credits and their expirations.[^gatekeeper]
 
 ## Authentication
 

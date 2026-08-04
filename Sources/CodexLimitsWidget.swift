@@ -151,7 +151,7 @@ struct CodexLimitsReader {
             "params": [
                 "clientInfo": [
                     "name": "codex-limits-widget",
-                    "version": "0.3.5"
+                    "version": "0.3.6"
                 ],
                 "capabilities": [
                     "experimentalApi": true
@@ -731,6 +731,7 @@ struct CodexCircularLimitsWidgetView: View {
                     style: StrokeStyle(lineWidth: 20, lineCap: .round)
                 )
                 .rotationEffect(.degrees(90))
+                .offset(y: -10)
             Circle()
                 .trim(from: arcStart, to: arcStart + arcSpan * progress)
                 .stroke(
@@ -738,6 +739,7 @@ struct CodexCircularLimitsWidgetView: View {
                     style: StrokeStyle(lineWidth: 20, lineCap: .round)
                 )
                 .rotationEffect(.degrees(90))
+                .offset(y: -10)
 
             if let error = entry.limits.error {
                 Text(error)

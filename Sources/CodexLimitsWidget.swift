@@ -151,7 +151,7 @@ struct CodexLimitsReader {
             "params": [
                 "clientInfo": [
                     "name": "codex-limits-widget",
-                    "version": "0.3.4"
+                    "version": "0.3.5"
                 ],
                 "capabilities": [
                     "experimentalApi": true
@@ -782,6 +782,7 @@ struct CodexCircularLimitsWidgetView: View {
                 }
                 .padding(.horizontal, 22)
                 .padding(.vertical, 18)
+                .offset(y: 12)
             } else {
                 Text("No usage window")
                     .font(.caption)

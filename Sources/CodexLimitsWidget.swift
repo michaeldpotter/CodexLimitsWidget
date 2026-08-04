@@ -552,6 +552,7 @@ struct CodexLimitsWidgetView: View {
                 Text("Updated \(entry.limits.updatedAt, style: .time)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .padding(.top, 4)
             }
         }
         .padding(.vertical, 14)
@@ -603,32 +604,36 @@ struct ResetCreditRow: View {
     let displayStyle: ResetDisplayStyle
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "arrow.counterclockwise.circle")
-                .foregroundStyle(.blue)
-            Text("Full resets")
-                .font(.caption.weight(.semibold))
-            Spacer(minLength: 4)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "arrow.counterclockwise.circle")
+                    .foregroundStyle(.blue)
+                Text("Full resets")
+                    .font(.caption.weight(.semibold))
+            }
             Text(detailText)
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.leading, 22)
         }
     }
 
     private var detailText: String {
-        let countText = "\(summary.availableCount)"
+        let noun = summary.availableCount == 1 ? "reset" : "resets"
+        let countText = "\(summary.availableCount) \(noun) available"
         guard let expiration = summary.nextExpiration else {
             return countText
         }
         switch displayStyle {
         case .relative:
             let days = max(0, Int(expiration.timeIntervalSinceNow) / 86_400)
-            return "\(countText) · exp \(days)d"
+            return "\(countText) · expires in \(days)d"
         case .absolute:
             let formatter = DateFormatter()
             formatter.setLocalizedDateFormatFromTemplate("MMM d")
-            return "\(countText) · exp \(formatter.string(from: expiration))"
+            return "\(countText) · expires \(formatter.string(from: expiration))"
         }
     }
 }

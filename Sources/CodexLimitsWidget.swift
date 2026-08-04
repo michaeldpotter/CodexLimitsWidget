@@ -151,7 +151,7 @@ struct CodexLimitsReader {
             "params": [
                 "clientInfo": [
                     "name": "codex-limits-widget",
-                    "version": "0.3.2"
+                    "version": "0.3.3"
                 ],
                 "capabilities": [
                     "experimentalApi": true
@@ -728,16 +728,20 @@ struct CodexCircularLimitsWidgetView: View {
                 .trim(from: arcStart, to: arcStart + arcSpan)
                 .stroke(
                     Color.secondary.opacity(0.18),
-                    style: StrokeStyle(lineWidth: 18, lineCap: .round)
+                    style: StrokeStyle(lineWidth: 24, lineCap: .round)
                 )
                 .rotationEffect(.degrees(90))
             Circle()
                 .trim(from: arcStart, to: arcStart + arcSpan * progress)
                 .stroke(
                     tint,
-                    style: StrokeStyle(lineWidth: 18, lineCap: .round)
+                    style: StrokeStyle(lineWidth: 24, lineCap: .round)
                 )
                 .rotationEffect(.degrees(90))
+
+            if window != nil {
+                percentageOnArc
+            }
 
             if let error = entry.limits.error {
                 Text(error)
@@ -752,14 +756,6 @@ struct CodexCircularLimitsWidgetView: View {
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-
-                    Text("\(window.remainingPercent ?? 0)%")
-                        .font(.system(size: 31, weight: .bold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(tint)
-                        .lineLimit(1)
-                    Text("LEFT")
-                        .font(.system(size: 8, weight: .medium))
-                        .foregroundStyle(.secondary)
 
                     Text(resetCountdown)
                         .font(.system(size: 19, weight: .bold).monospacedDigit())
@@ -799,6 +795,22 @@ struct CodexCircularLimitsWidgetView: View {
 
     private let arcStart = 0.125
     private let arcSpan = 0.75
+
+    private var percentageOnArc: some View {
+        GeometryReader { geometry in
+            let size = min(geometry.size.width, geometry.size.height)
+            let radius = size / 2 - 12
+            let angle = (135 + 270 * progress / 2) * Double.pi / 180
+            Text("\(window?.remainingPercent ?? 0)%")
+                .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .position(
+                    x: geometry.size.width / 2 + cos(angle) * radius,
+                    y: geometry.size.height / 2 + sin(angle) * radius
+                )
+        }
+    }
 
     private var window: LimitWindow? {
         entry.limits.windows.first

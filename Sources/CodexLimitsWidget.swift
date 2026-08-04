@@ -17,7 +17,7 @@ struct LimitWindow {
 
 struct ResetCreditSummary {
     let availableCount: Int
-    let nextExpiration: Date?
+    let expirations: [Date]
 }
 
 struct CodexLimits {
@@ -44,7 +44,10 @@ struct CodexLimits {
         ],
         resetCredits: ResetCreditSummary(
             availableCount: 2,
-            nextExpiration: Date().addingTimeInterval(8 * 24 * 60 * 60)
+            expirations: [
+                Date().addingTimeInterval(8 * 24 * 60 * 60),
+                Date().addingTimeInterval(9 * 24 * 60 * 60)
+            ]
         ),
         status: nil,
         updatedAt: Date(),
@@ -376,7 +379,7 @@ struct CodexLimitsReader {
             .filter { $0 > Date() }
         return ResetCreditSummary(
             availableCount: count,
-            nextExpiration: expirations.min()
+            expirations: expirations.sorted()
         )
     }
 
@@ -606,21 +609,28 @@ struct ResetCreditRow: View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Full Resets")
                 .font(.caption.weight(.semibold))
-            Text(detailText)
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            ForEach(Array(resetLines.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
     }
 
-    private var detailText: String {
-        guard let expiration = summary.nextExpiration else {
-            return "\(summary.availableCount) Available"
+    private var resetLines: [String] {
+        guard summary.availableCount > 0 else {
+            return ["0 Available"]
         }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "MM/dd"
-        return "\(summary.availableCount) Available - Exp \(formatter.string(from: expiration))"
+        return (0..<summary.availableCount).map { index in
+            guard summary.expirations.indices.contains(index) else {
+                return "1 Available - Exp unknown"
+            }
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "MM/dd"
+            return "1 Available - Exp \(formatter.string(from: summary.expirations[index]))"
+        }
     }
 }
 

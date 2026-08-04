@@ -604,12 +604,8 @@ struct ResetCreditRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: "arrow.counterclockwise.circle")
-                    .foregroundStyle(.blue)
-                Text("Full Resets")
-                    .font(.caption.weight(.semibold))
-            }
+            Text("Full Resets")
+                .font(.caption.weight(.semibold))
             Text(detailText)
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.secondary)

@@ -607,26 +607,24 @@ struct ResetCreditRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "arrow.counterclockwise.circle")
                     .foregroundStyle(.blue)
-                Text("Full resets")
+                Text("Full Resets")
                     .font(.caption.weight(.semibold))
             }
             Text(detailText)
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
         }
     }
 
     private var detailText: String {
-        let noun = summary.availableCount == 1 ? "reset" : "resets"
-        let countText = "\(summary.availableCount) \(noun) available"
         guard let expiration = summary.nextExpiration else {
-            return countText
+            return "\(summary.availableCount) Available"
         }
         let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("MMM d")
-        return "\(countText) · expires \(formatter.string(from: expiration))"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MM/dd"
+        return "\(summary.availableCount) Available - Exp \(formatter.string(from: expiration))"
     }
 }
 

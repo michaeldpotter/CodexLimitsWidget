@@ -37,7 +37,7 @@ struct CodexLimits {
                 resetDate: Date().addingTimeInterval(3 * 60 * 60 + 25 * 60)
             ),
             LimitWindow(
-                name: "weekly",
+                name: "Weekly",
                 usedPercent: 10,
                 resetDate: Date().addingTimeInterval(6 * 24 * 60 * 60 + 8 * 60 * 60)
             )
@@ -63,6 +63,11 @@ struct CodexLimitsEntry: TimelineEntry {
 enum ResetDisplayStyle {
     case relative
     case absolute
+}
+
+private enum ResetDateFormat {
+    static let date = "MM/dd"
+    static let dateAndTime = "\(date) HH:mm"
 }
 
 struct CodexLimitsProvider: TimelineProvider {
@@ -350,7 +355,7 @@ struct CodexLimitsReader {
         case 300:
             name = "5h"
         case 10080:
-            name = "weekly"
+            name = "Weekly"
         case let minutes? where minutes % 1440 == 0:
             name = "\(minutes / 1440)d"
         case let minutes? where minutes % 60 == 0:
@@ -628,7 +633,7 @@ struct ResetCreditRow: View {
             }
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.dateFormat = "MM/dd"
+            formatter.dateFormat = ResetDateFormat.date
             return "1 Available - Exp \(formatter.string(from: summary.expirations[index]))"
         }
     }
@@ -693,7 +698,8 @@ struct LimitRow: View {
                 formatter.setLocalizedDateFormatFromTemplate("HH:mm")
                 return "resets at \(formatter.string(from: date))"
             }
-            formatter.dateFormat = "dd.MM HH:mm"
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = ResetDateFormat.dateAndTime
             return "resets \(formatter.string(from: date))"
         }
     }

@@ -723,33 +723,21 @@ struct WeeklyPace {
         targetFraction = min(1, max(0, 1 - remainingFraction))
     }
 
-    var differencePoints: Int {
-        Int(((usedFraction - targetFraction) * 100).rounded())
-    }
-
-    var isOnPace: Bool {
-        abs(differencePoints) <= 2
-    }
-
     var statusText: String {
-        if isOnPace {
-            return "on pace"
+        if usedFraction <= 0.80 {
+            return "Good"
         }
-        return differencePoints > 0 ? "over pace" : "under pace"
-    }
-
-    var differenceText: String {
-        if isOnPace {
-            return "OK"
+        if usedFraction <= 0.90 {
+            return "Watch"
         }
-        return "\(abs(differencePoints))%"
+        return "High"
     }
 
     var tint: Color {
-        if differencePoints > 20 {
+        if usedFraction > 0.90 {
             return .red
         }
-        if differencePoints > 2 {
+        if usedFraction > 0.80 {
             return .orange
         }
         return .green
@@ -784,18 +772,14 @@ struct WeeklyPaceGauge: View {
                         style: StrokeStyle(lineWidth: compact ? 4 : 5, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-                Text(pace.differenceText)
+                Text(pace.statusText)
                     .font((compact ? Font.system(size: 8) : .caption2).weight(.bold).monospacedDigit())
                     .foregroundStyle(pace.tint)
             }
             .frame(width: compact ? 34 : 44, height: compact ? 34 : 44)
-            Text(pace.statusText)
-                .font(.system(size: compact ? 8 : 9, weight: .medium))
-                .foregroundStyle(pace.tint)
-                .lineLimit(1)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Weekly usage \(pace.statusText) by \(abs(pace.differencePoints)) percent")
+        .accessibilityLabel("Weekly usage status: \(pace.statusText)")
     }
 }
 
@@ -806,7 +790,7 @@ struct WeeklyPaceBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(compact ? "Pace" : "Weekly Pace")
+                Text(compact ? "Usage" : "Weekly Usage")
                     .font(.caption2.weight(.semibold))
                 Spacer(minLength: 2)
                 Text(paceLabel)
@@ -854,7 +838,7 @@ struct WeeklyPaceBar: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "Weekly usage \(usedPercent) percent, target \(targetPercent) percent, \(pace.statusText)"
+            "Weekly usage \(usedPercent) percent, status: \(pace.statusText)"
         )
     }
 
@@ -862,24 +846,20 @@ struct WeeklyPaceBar: View {
         Int((pace.usedFraction * 100).rounded())
     }
 
-    private var targetPercent: Int {
-        Int((pace.targetFraction * 100).rounded())
-    }
-
     private var paceLabel: String {
-        pace.isOnPace ? "on pace" : "\(abs(pace.differencePoints))% \(pace.statusText)"
+        pace.statusText
     }
 
     private var greenFraction: Double {
-        min(1, pace.targetFraction + 0.02)
+        0.80
     }
 
     private var yellowFraction: Double {
-        max(0, min(1, pace.targetFraction + 0.20) - greenFraction)
+        0.10
     }
 
     private var redFraction: Double {
-        max(0, 1 - greenFraction - yellowFraction)
+        0.10
     }
 
     private func zoneWidth(_ fraction: Double, in width: CGFloat) -> CGFloat {
@@ -900,7 +880,7 @@ struct SmallWeeklyPaceRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("Weekly")
+                Text("Weekly Limit")
                     .font(.caption.weight(.semibold))
                 Spacer(minLength: 0)
                 if let resetDate = window.resetDate {
@@ -1154,8 +1134,8 @@ struct CodexCircularLimitsWidget: Widget {
         StaticConfiguration(kind: kind, provider: CodexLimitsProvider()) { entry in
             CodexCircularLimitsWidgetView(entry: entry)
         }
-        .configurationDisplayName("Codex Weekly Pace")
-        .description("Shows whether weekly Codex usage is under or over pace.")
+        .configurationDisplayName("Codex Weekly Usage")
+        .description("Shows weekly Codex usage as Good, Watch, or High.")
         .supportedFamilies([.systemSmall])
     }
 }
@@ -1166,7 +1146,7 @@ struct CodexCircularLimitsWidgetView: View {
     var body: some View {
         VStack(spacing: 5) {
             HStack {
-                Text("Weekly Pace")
+                Text("Weekly Limit")
                     .font(.caption.weight(.semibold))
                 Spacer()
                 if let plan = entry.limits.plan {
@@ -1195,14 +1175,9 @@ struct CodexCircularLimitsWidgetView: View {
                         .trim(from: 0, to: pace.usedFraction)
                         .stroke(pace.tint, style: StrokeStyle(lineWidth: 10, lineCap: .round))
                         .rotationEffect(.degrees(-90))
-                    VStack(spacing: 0) {
-                        Text(pace.differenceText)
-                            .font(.title2.weight(.bold).monospacedDigit())
-                            .foregroundStyle(pace.tint)
-                        Text(pace.statusText)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(pace.tint)
-                    }
+                    Text(pace.statusText)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(pace.tint)
                 }
                 .padding(2)
                 Text(usageText)

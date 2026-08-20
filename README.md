@@ -58,11 +58,10 @@ The app provides small and medium versions of `Codex Limits`, which shows
 relative reset times, and `Codex Reset Times`, which shows the clock time or
 date when limits reset. Both widgets show every usage bucket returned by Codex.
 When available, they also show Full Reset credits and their expirations.[^gatekeeper]
-Small and medium widgets include a weekly pace gauge. It compares the percentage
-of the weekly allowance used with the percentage of the seven-day window
-elapsed, so you can see whether usage is under, on, or over pace. The small
-`Codex Weekly Pace` ring also remains available for compatibility with existing
-desktop instances.
+Small and medium widgets include a weekly usage bar. It categorizes the weekly
+allowance as Good through 80% used, Watch through 90%, and High above 90%. The
+small `Codex Weekly Usage` ring also remains available for compatibility with
+existing desktop instances.
 
 ## Authentication
 

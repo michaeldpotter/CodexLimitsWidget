@@ -827,6 +827,7 @@ struct WeeklyPaceBar: View {
                                     if redFraction > 0 {
                                         Rectangle()
                                             .fill(.red.opacity(0.82))
+                                            .frame(width: zoneWidth(redFraction, in: geometry.size.width))
                                     }
                                 }
                                 Rectangle()
@@ -862,19 +863,20 @@ struct WeeklyPaceBar: View {
     }
 
     private var greenFraction: Double {
-        0.80
+        60.0 / 90.0
     }
 
     private var yellowFraction: Double {
-        0.10
+        20.0 / 90.0
     }
 
     private var redFraction: Double {
-        0.10
+        10.0 / 90.0
     }
 
     private func zoneWidth(_ fraction: Double, in width: CGFloat) -> CGFloat {
-        max(0, width * fraction)
+        let spacing = CGFloat(2)
+        return max(0, (width - spacing) * fraction)
     }
 
     private func indicatorOffset(in width: CGFloat) -> CGFloat {

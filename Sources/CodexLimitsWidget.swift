@@ -6,6 +6,7 @@ struct LimitWindow {
     let name: String
     let usedPercent: Int?
     let resetDate: Date?
+    let durationMinutes: Int?
 
     var remainingPercent: Int? {
         guard let usedPercent else {
@@ -34,12 +35,14 @@ struct CodexLimits {
             LimitWindow(
                 name: "5h",
                 usedPercent: 24,
-                resetDate: Date().addingTimeInterval(3 * 60 * 60 + 25 * 60)
+                resetDate: Date().addingTimeInterval(3 * 60 * 60 + 25 * 60),
+                durationMinutes: 300
             ),
             LimitWindow(
                 name: "Weekly",
                 usedPercent: 10,
-                resetDate: Date().addingTimeInterval(6 * 24 * 60 * 60 + 8 * 60 * 60)
+                resetDate: Date().addingTimeInterval(6 * 24 * 60 * 60 + 8 * 60 * 60),
+                durationMinutes: 10_080
             )
         ],
         resetCredits: ResetCreditSummary(
@@ -370,7 +373,8 @@ struct CodexLimitsReader {
         return LimitWindow(
             name: displayName,
             usedPercent: number(dict["usedPercent"]),
-            resetDate: resetDate
+            resetDate: resetDate,
+            durationMinutes: duration
         )
     }
 
@@ -533,7 +537,7 @@ struct CodexLimitsWidgetView: View {
     let resetDisplayStyle: ResetDisplayStyle
 
     var body: some View {
-        VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 10) {
+        VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 6) {
             header
             if let error = entry.limits.error {
                 Text(error)
@@ -547,7 +551,7 @@ struct CodexLimitsWidgetView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if family != .systemMedium, let credits = entry.limits.resetCredits {
+                if family != .systemMedium, weeklyPace == nil, let credits = entry.limits.resetCredits {
                     ResetCreditRow(summary: credits)
                 }
                 if let status = entry.limits.status {
@@ -556,14 +560,16 @@ struct CodexLimitsWidgetView: View {
                         .foregroundStyle(.red)
                         .lineLimit(1)
                 }
-                Spacer(minLength: 0)
-                Text("Updated \(entry.limits.updatedAt, style: .time)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
+                if family != .systemMedium {
+                    Spacer(minLength: 0)
+                    Text("Updated \(entry.limits.updatedAt, style: .time)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                }
             }
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, family == .systemSmall ? 10 : 6)
         .padding(.horizontal, 2)
         .containerBackground(.background, for: .widget)
     }
@@ -571,20 +577,48 @@ struct CodexLimitsWidgetView: View {
     @ViewBuilder
     private var windowsView: some View {
         if family == .systemMedium {
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), alignment: .topLeading),
-                    GridItem(.flexible(), alignment: .topLeading)
-                ],
-                spacing: 8
-            ) {
-                ForEach(Array(visibleWindows.enumerated()), id: \.offset) { _, window in
-                    LimitRow(window: window, resetDisplayStyle: resetDisplayStyle)
+            VStack(alignment: .leading, spacing: 6) {
+                LazyVGrid(
+                    columns: mediumColumns,
+                    spacing: 6
+                ) {
+                    mediumWindowCell(standardWeeklyWindow)
+                    mediumWindowCell(sparkFiveHourWindow)
+                    if let weeklyPace {
+                        WeeklyPaceBar(pace: weeklyPace)
+                    } else {
+                        Color.clear
+                            .accessibilityHidden(true)
+                    }
+                    mediumWindowCell(sparkWeeklyWindow)
+                    ForEach(Array(additionalMediumWindows.enumerated()), id: \.offset) { _, window in
+                        CompactLimitRow(window: window, resetDisplayStyle: resetDisplayStyle)
+                    }
                 }
-                if let credits = entry.limits.resetCredits {
-                    ResetCreditRow(summary: credits)
+
+                LazyVGrid(columns: mediumColumns, alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        if let credits = entry.limits.resetCredits {
+                            ResetCreditRow(summary: credits)
+                        }
+                        Text("Updated \(entry.limits.updatedAt, style: .time)")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                    }
+                    Color.clear
+                        .accessibilityHidden(true)
                 }
             }
+        } else if let weeklyPace, let weeklyWindow {
+            if let primary = smallPrimaryWindow {
+                LimitRow(window: primary, resetDisplayStyle: resetDisplayStyle)
+            }
+            SmallWeeklyPaceRow(
+                window: weeklyWindow,
+                pace: weeklyPace,
+                credits: entry.limits.resetCredits,
+                resetDisplayStyle: resetDisplayStyle
+            )
         } else {
             ForEach(Array(visibleWindows.enumerated()), id: \.offset) { _, window in
                 LimitRow(window: window, resetDisplayStyle: resetDisplayStyle)
@@ -602,6 +636,60 @@ struct CodexLimitsWidgetView: View {
         return Array(entry.limits.windows.prefix(maximum))
     }
 
+    private var mediumColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 8, alignment: .topLeading),
+            GridItem(.flexible(), spacing: 8, alignment: .topLeading)
+        ]
+    }
+
+    private var weeklyWindow: LimitWindow? {
+        entry.limits.windows.first(where: { $0.durationMinutes == 10_080 })
+    }
+
+    private var smallPrimaryWindow: LimitWindow? {
+        entry.limits.windows.first(where: { $0.durationMinutes != 10_080 })
+    }
+
+    private var standardWeeklyWindow: LimitWindow? {
+        visibleWindows.first(where: { $0.durationMinutes == 10_080 && !isSpark($0) })
+    }
+
+    private var sparkFiveHourWindow: LimitWindow? {
+        visibleWindows.first(where: { $0.durationMinutes == 300 && isSpark($0) })
+    }
+
+    private var sparkWeeklyWindow: LimitWindow? {
+        visibleWindows.first(where: { $0.durationMinutes == 10_080 && isSpark($0) })
+    }
+
+    private var additionalMediumWindows: [LimitWindow] {
+        visibleWindows.filter { window in
+            if window.durationMinutes == 10_080 && !isSpark(window) { return false }
+            if window.durationMinutes == 300 && isSpark(window) { return false }
+            if window.durationMinutes == 10_080 && isSpark(window) { return false }
+            return true
+        }
+    }
+
+    private func isSpark(_ window: LimitWindow) -> Bool {
+        window.name.localizedCaseInsensitiveContains("spark")
+    }
+
+    @ViewBuilder
+    private func mediumWindowCell(_ window: LimitWindow?) -> some View {
+        if let window {
+            CompactLimitRow(window: window, resetDisplayStyle: resetDisplayStyle)
+        } else {
+            Color.clear
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var weeklyPace: WeeklyPace? {
+        weeklyWindow.flatMap { WeeklyPace(window: $0, now: entry.date) }
+    }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Codex")
@@ -613,6 +701,241 @@ struct CodexLimitsWidgetView: View {
                     .foregroundStyle(.blue)
             }
         }
+    }
+}
+
+struct WeeklyPace {
+    let usedFraction: Double
+    let targetFraction: Double
+
+    init?(window: LimitWindow, now: Date) {
+        guard
+            let usedPercent = window.usedPercent,
+            let resetDate = window.resetDate,
+            let durationMinutes = window.durationMinutes,
+            durationMinutes > 0
+        else {
+            return nil
+        }
+        let duration = TimeInterval(durationMinutes * 60)
+        let remainingFraction = resetDate.timeIntervalSince(now) / duration
+        usedFraction = min(1, max(0, Double(usedPercent) / 100))
+        targetFraction = min(1, max(0, 1 - remainingFraction))
+    }
+
+    var differencePoints: Int {
+        Int(((usedFraction - targetFraction) * 100).rounded())
+    }
+
+    var isOnPace: Bool {
+        abs(differencePoints) <= 2
+    }
+
+    var statusText: String {
+        if isOnPace {
+            return "on pace"
+        }
+        return differencePoints > 0 ? "over pace" : "under pace"
+    }
+
+    var differenceText: String {
+        if isOnPace {
+            return "OK"
+        }
+        return "\(abs(differencePoints))%"
+    }
+
+    var tint: Color {
+        if differencePoints > 20 {
+            return .red
+        }
+        if differencePoints > 2 {
+            return .orange
+        }
+        return .green
+    }
+}
+
+struct WeeklyPaceGauge: View {
+    let pace: WeeklyPace
+    var compact = false
+
+    var body: some View {
+        VStack(spacing: 2) {
+            if !compact {
+                Text("WEEKLY PACE")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            ZStack {
+                Circle()
+                    .stroke(.secondary.opacity(0.18), lineWidth: compact ? 4 : 5)
+                Circle()
+                    .trim(from: 0, to: pace.targetFraction)
+                    .stroke(
+                        .blue.opacity(0.45),
+                        style: StrokeStyle(lineWidth: compact ? 2 : 3, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                Circle()
+                    .trim(from: 0, to: pace.usedFraction)
+                    .stroke(
+                        pace.tint,
+                        style: StrokeStyle(lineWidth: compact ? 4 : 5, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                Text(pace.differenceText)
+                    .font((compact ? Font.system(size: 8) : .caption2).weight(.bold).monospacedDigit())
+                    .foregroundStyle(pace.tint)
+            }
+            .frame(width: compact ? 34 : 44, height: compact ? 34 : 44)
+            Text(pace.statusText)
+                .font(.system(size: compact ? 8 : 9, weight: .medium))
+                .foregroundStyle(pace.tint)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Weekly usage \(pace.statusText) by \(abs(pace.differencePoints)) percent")
+    }
+}
+
+struct WeeklyPaceBar: View {
+    let pace: WeeklyPace
+    var compact = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(compact ? "Pace" : "Weekly Pace")
+                    .font(.caption2.weight(.semibold))
+                Spacer(minLength: 2)
+                Text(paceLabel)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(pace.tint)
+            }
+            HStack(spacing: 6) {
+                ProgressView(value: 1, total: 1)
+                    .opacity(0)
+                    .overlay {
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                HStack(spacing: 1) {
+                                    Rectangle()
+                                        .fill(.green.opacity(0.82))
+                                        .frame(width: zoneWidth(greenFraction, in: geometry.size.width))
+                                    if yellowFraction > 0 {
+                                        Rectangle()
+                                            .fill(.yellow.opacity(0.9))
+                                            .frame(width: zoneWidth(yellowFraction, in: geometry.size.width))
+                                    }
+                                    if redFraction > 0 {
+                                        Rectangle()
+                                            .fill(.red.opacity(0.82))
+                                    }
+                                }
+                                Rectangle()
+                                    .fill(.primary)
+                                    .frame(width: 2)
+                                    .offset(x: indicatorOffset(in: geometry.size.width))
+                            }
+                            .clipShape(Capsule())
+                            .overlay {
+                                Capsule()
+                                    .stroke(.secondary.opacity(0.2), lineWidth: 0.5)
+                            }
+                        }
+                    }
+                Text("\(usedPercent)% used")
+                    .font(.system(size: 8).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(width: 44, alignment: .trailing)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "Weekly usage \(usedPercent) percent, target \(targetPercent) percent, \(pace.statusText)"
+        )
+    }
+
+    private var usedPercent: Int {
+        Int((pace.usedFraction * 100).rounded())
+    }
+
+    private var targetPercent: Int {
+        Int((pace.targetFraction * 100).rounded())
+    }
+
+    private var paceLabel: String {
+        pace.isOnPace ? "on pace" : "\(abs(pace.differencePoints))% \(pace.statusText)"
+    }
+
+    private var greenFraction: Double {
+        min(1, pace.targetFraction + 0.02)
+    }
+
+    private var yellowFraction: Double {
+        max(0, min(1, pace.targetFraction + 0.20) - greenFraction)
+    }
+
+    private var redFraction: Double {
+        max(0, 1 - greenFraction - yellowFraction)
+    }
+
+    private func zoneWidth(_ fraction: Double, in width: CGFloat) -> CGFloat {
+        max(0, width * fraction)
+    }
+
+    private func indicatorOffset(in width: CGFloat) -> CGFloat {
+        min(max(0, width - 2), max(0, width * pace.usedFraction - 1))
+    }
+}
+
+struct SmallWeeklyPaceRow: View {
+    let window: LimitWindow
+    let pace: WeeklyPace
+    let credits: ResetCreditSummary?
+    let resetDisplayStyle: ResetDisplayStyle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("Weekly")
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 0)
+                if let resetDate = window.resetDate {
+                    Text(resetText(for: resetDate))
+                        .font(.system(size: 8).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            WeeklyPaceBar(pace: pace, compact: true)
+            if let credits {
+                Text(creditText(credits))
+                    .font(.system(size: 8, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private func resetText(for date: Date) -> String {
+        if resetDisplayStyle == .relative {
+            let seconds = max(0, Int(date.timeIntervalSinceNow))
+            let days = seconds / 86_400
+            let hours = (seconds % 86_400) / 3_600
+            return days > 0 ? "resets in \(days)d \(hours)h" : "resets in \(hours)h"
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = ResetDateFormat.dateAndTime
+        return "resets \(formatter.string(from: date))"
+    }
+
+    private func creditText(_ summary: ResetCreditSummary) -> String {
+        let noun = summary.availableCount == 1 ? "reset" : "resets"
+        return "\(summary.availableCount) full \(noun)"
     }
 }
 
@@ -644,6 +967,68 @@ struct ResetCreditRow: View {
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.dateFormat = ResetDateFormat.date
             return "1 Available - Exp \(formatter.string(from: summary.expirations[index]))"
+        }
+    }
+}
+
+struct CompactLimitRow: View {
+    let window: LimitWindow
+    let resetDisplayStyle: ResetDisplayStyle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(window.name)
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text(percentText)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            HStack(spacing: 6) {
+                ProgressView(value: Double(window.remainingPercent ?? 0), total: 100)
+                    .tint(tint)
+                if let resetDate = window.resetDate {
+                    Text(resetText(for: resetDate))
+                        .font(.system(size: 8).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(width: 44, alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    private var percentText: String {
+        window.remainingPercent.map { "\($0)% left" } ?? "unknown"
+    }
+
+    private var tint: Color {
+        guard let remaining = window.remainingPercent else { return .gray }
+        if remaining <= 15 { return .red }
+        if remaining <= 35 { return .orange }
+        return .green
+    }
+
+    private func resetText(for date: Date) -> String {
+        switch resetDisplayStyle {
+        case .relative:
+            let seconds = max(0, Int(date.timeIntervalSinceNow))
+            let days = seconds / 86_400
+            let hours = (seconds % 86_400) / 3_600
+            let minutes = (seconds % 3_600) / 60
+            if days > 0 { return "\(days)d \(hours)h" }
+            if hours > 0 { return "\(hours)h \(minutes)m" }
+            return "\(minutes)m"
+        case .absolute:
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = Calendar.current.isDate(date, inSameDayAs: Date())
+                ? "HH:mm"
+                : ResetDateFormat.dateAndTime
+            return formatter.string(from: date)
         }
     }
 }
@@ -760,10 +1145,102 @@ struct CodexLimitsResetTimesWidget: Widget {
     }
 }
 
+// Keep this kind registered so existing desktop instances from versions that
+// offered the ring widget continue to render instead of becoming orphaned.
+struct CodexCircularLimitsWidget: Widget {
+    let kind = "CodexCircularLimitsWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: CodexLimitsProvider()) { entry in
+            CodexCircularLimitsWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Codex Weekly Pace")
+        .description("Shows whether weekly Codex usage is under or over pace.")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
+struct CodexCircularLimitsWidgetView: View {
+    let entry: CodexLimitsEntry
+
+    var body: some View {
+        VStack(spacing: 5) {
+            HStack {
+                Text("Weekly Pace")
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                if let plan = entry.limits.plan {
+                    Text(plan.uppercased())
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.blue)
+                }
+            }
+            if let error = entry.limits.error {
+                Spacer()
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+                Spacer()
+            } else if let pace {
+                ZStack {
+                    Circle()
+                        .stroke(.secondary.opacity(0.18), lineWidth: 10)
+                    Circle()
+                        .trim(from: 0, to: pace.targetFraction)
+                        .stroke(.blue.opacity(0.45), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Circle()
+                        .trim(from: 0, to: pace.usedFraction)
+                        .stroke(pace.tint, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    VStack(spacing: 0) {
+                        Text(pace.differenceText)
+                            .font(.title2.weight(.bold).monospacedDigit())
+                            .foregroundStyle(pace.tint)
+                        Text(pace.statusText)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(pace.tint)
+                    }
+                }
+                .padding(2)
+                Text(usageText)
+                    .font(.system(size: 8).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            } else {
+                Spacer()
+                Text("Weekly limit unavailable")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 2)
+        .containerBackground(.background, for: .widget)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var weeklyWindow: LimitWindow? {
+        entry.limits.windows.first(where: { $0.durationMinutes == 10_080 })
+    }
+
+    private var pace: WeeklyPace? {
+        weeklyWindow.flatMap { WeeklyPace(window: $0, now: entry.date) }
+    }
+
+    private var usageText: String {
+        guard let window = weeklyWindow, let pace else { return "" }
+        return "\(window.usedPercent ?? 0)% used · \(Int((pace.targetFraction * 100).rounded()))% target"
+    }
+}
+
 @main
 struct CodexLimitsWidgetBundle: WidgetBundle {
     var body: some Widget {
         CodexLimitsWidget()
         CodexLimitsResetTimesWidget()
+        CodexCircularLimitsWidget()
     }
 }

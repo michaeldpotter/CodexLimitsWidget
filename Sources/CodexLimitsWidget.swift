@@ -547,7 +547,7 @@ struct CodexLimitsWidgetView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if let credits = entry.limits.resetCredits {
+                if family != .systemMedium, let credits = entry.limits.resetCredits {
                     ResetCreditRow(summary: credits)
                 }
                 if let status = entry.limits.status {
@@ -571,9 +571,18 @@ struct CodexLimitsWidgetView: View {
     @ViewBuilder
     private var windowsView: some View {
         if family == .systemMedium {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), alignment: .topLeading),
+                    GridItem(.flexible(), alignment: .topLeading)
+                ],
+                spacing: 8
+            ) {
                 ForEach(Array(visibleWindows.enumerated()), id: \.offset) { _, window in
                     LimitRow(window: window, resetDisplayStyle: resetDisplayStyle)
+                }
+                if let credits = entry.limits.resetCredits {
+                    ResetCreditRow(summary: credits)
                 }
             }
         } else {

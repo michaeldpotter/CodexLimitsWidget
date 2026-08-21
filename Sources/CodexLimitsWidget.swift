@@ -804,9 +804,9 @@ struct WeeklyPaceBar: View {
                     .font(.caption2.weight(.semibold))
                 if !pace.isOnPace {
                     Spacer(minLength: 2)
-                    Text(paceLabel)
+                    Text(pacePercentageLabel)
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(pace.tint)
+                        .foregroundStyle(.primary)
                 }
             }
             HStack(spacing: 6) {
@@ -842,17 +842,29 @@ struct WeeklyPaceBar: View {
                             }
                         }
                     }
-                Color.clear
-                    .frame(width: 44)
-                    .accessibilityHidden(true)
+                if !pace.isOnPace {
+                    Text(paceStatusLabel)
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(pace.tint)
+                        .lineLimit(1)
+                        .frame(width: 44, alignment: .trailing)
+                } else {
+                    Color.clear
+                        .frame(width: 44)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
     }
 
-    private var paceLabel: String {
-        "\(abs(pace.differencePoints))% \(pace.statusText)"
+    private var pacePercentageLabel: String {
+        "\(abs(pace.differencePoints))%"
+    }
+
+    private var paceStatusLabel: String {
+        pace.differencePoints > 0 ? "Over" : "Under"
     }
 
     private var accessibilityText: String {

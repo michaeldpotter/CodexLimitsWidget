@@ -39,7 +39,7 @@ struct CodexLimits {
                 durationMinutes: 300
             ),
             LimitWindow(
-                name: "Weekly",
+                name: "Weekly Allotment",
                 usedPercent: 10,
                 resetDate: Date().addingTimeInterval(6 * 24 * 60 * 60 + 8 * 60 * 60),
                 durationMinutes: 10_080
@@ -358,7 +358,7 @@ struct CodexLimitsReader {
         case 300:
             name = "5h"
         case 10080:
-            name = "Weekly"
+            name = "Weekly Allotment"
         case let minutes? where minutes % 1440 == 0:
             name = "\(minutes / 1440)d"
         case let minutes? where minutes % 60 == 0:
@@ -368,7 +368,12 @@ struct CodexLimitsReader {
         default:
             name = fallbackName
         }
-        let displayName = prefix.map { "\($0) \(name)" } ?? name
+        let displayName: String
+        if duration == 10_080, prefix?.localizedCaseInsensitiveCompare("Spark") == .orderedSame {
+            displayName = "Spark Weekly"
+        } else {
+            displayName = prefix.map { "\($0) \(name)" } ?? name
+        }
         let resetDate = number(dict["resetsAt"]).map { Date(timeIntervalSince1970: TimeInterval($0)) }
         return LimitWindow(
             name: displayName,
@@ -723,21 +728,26 @@ struct WeeklyPace {
         targetFraction = min(1, max(0, 1 - remainingFraction))
     }
 
+    var differencePoints: Int {
+        Int(((usedFraction - targetFraction) * 100).rounded())
+    }
+
+    var isOnPace: Bool {
+        abs(differencePoints) <= 2
+    }
+
     var statusText: String {
-        if usedFraction <= 0.80 {
-            return "Good"
+        if isOnPace {
+            return "on pace"
         }
-        if usedFraction <= 0.90 {
-            return "Watch"
-        }
-        return "High"
+        return differencePoints > 0 ? "over pace" : "under pace"
     }
 
     var tint: Color {
-        if usedFraction > 0.90 {
+        if differencePoints > 20 {
             return .red
         }
-        if usedFraction > 0.80 {
+        if differencePoints > 2 {
             return .orange
         }
         return .green
@@ -751,7 +761,7 @@ struct WeeklyPaceGauge: View {
     var body: some View {
         VStack(spacing: 2) {
             if !compact {
-                Text("WEEKLY PACE")
+                Text("USAGE PACE")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
@@ -779,7 +789,7 @@ struct WeeklyPaceGauge: View {
             .frame(width: compact ? 34 : 44, height: compact ? 34 : 44)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Weekly usage status: \(pace.statusText)")
+        .accessibilityLabel("Weekly allotment is \(pace.statusText)")
     }
 }
 
@@ -790,12 +800,14 @@ struct WeeklyPaceBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(compact ? "Usage" : "Weekly Usage")
+                Text("Usage Pace")
                     .font(.caption2.weight(.semibold))
-                Spacer(minLength: 2)
-                Text(paceLabel)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(pace.tint)
+                if !pace.isOnPace {
+                    Spacer(minLength: 2)
+                    Text(pacePercentageLabel)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.primary)
+                }
             }
             HStack(spacing: 6) {
                 ProgressView(value: 1, total: 1)
@@ -815,6 +827,7 @@ struct WeeklyPaceBar: View {
                                     if redFraction > 0 {
                                         Rectangle()
                                             .fill(.red.opacity(0.82))
+                                            .frame(width: zoneWidth(redFraction, in: geometry.size.width))
                                     }
                                 }
                                 Rectangle()
@@ -829,41 +842,53 @@ struct WeeklyPaceBar: View {
                             }
                         }
                     }
-                Text("\(usedPercent)% used")
-                    .font(.system(size: 8).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(width: 44, alignment: .trailing)
+                if !pace.isOnPace {
+                    Text(paceStatusLabel)
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(pace.tint)
+                        .lineLimit(1)
+                        .frame(width: 44, alignment: .trailing)
+                } else {
+                    Color.clear
+                        .frame(width: 44)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            "Weekly usage \(usedPercent) percent, status: \(pace.statusText)"
-        )
+        .accessibilityLabel(accessibilityText)
     }
 
-    private var usedPercent: Int {
-        Int((pace.usedFraction * 100).rounded())
+    private var pacePercentageLabel: String {
+        "\(abs(pace.differencePoints))%"
     }
 
-    private var paceLabel: String {
-        pace.statusText
+    private var paceStatusLabel: String {
+        pace.differencePoints > 0 ? "Over" : "Under"
+    }
+
+    private var accessibilityText: String {
+        if pace.isOnPace {
+            return "Weekly allotment is on pace"
+        }
+        return "Weekly allotment is \(pace.statusText) by \(abs(pace.differencePoints)) percentage points"
     }
 
     private var greenFraction: Double {
-        0.80
+        60.0 / 90.0
     }
 
     private var yellowFraction: Double {
-        0.10
+        20.0 / 90.0
     }
 
     private var redFraction: Double {
-        0.10
+        10.0 / 90.0
     }
 
     private func zoneWidth(_ fraction: Double, in width: CGFloat) -> CGFloat {
-        max(0, width * fraction)
+        let spacing = CGFloat(2)
+        return max(0, (width - spacing) * fraction)
     }
 
     private func indicatorOffset(in width: CGFloat) -> CGFloat {
@@ -880,7 +905,7 @@ struct SmallWeeklyPaceRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("Weekly Limit")
+                Text("Weekly Allotment")
                     .font(.caption.weight(.semibold))
                 Spacer(minLength: 0)
                 if let resetDate = window.resetDate {
@@ -1134,8 +1159,8 @@ struct CodexCircularLimitsWidget: Widget {
         StaticConfiguration(kind: kind, provider: CodexLimitsProvider()) { entry in
             CodexCircularLimitsWidgetView(entry: entry)
         }
-        .configurationDisplayName("Codex Weekly Usage")
-        .description("Shows weekly Codex usage as Good, Watch, or High.")
+        .configurationDisplayName("Codex Usage Pace")
+        .description("Shows whether the weekly Codex allotment is on track to run out before reset.")
         .supportedFamilies([.systemSmall])
     }
 }
@@ -1146,7 +1171,7 @@ struct CodexCircularLimitsWidgetView: View {
     var body: some View {
         VStack(spacing: 5) {
             HStack {
-                Text("Weekly Limit")
+                Text("Weekly Allotment")
                     .font(.caption.weight(.semibold))
                 Spacer()
                 if let plan = entry.limits.plan {
@@ -1185,7 +1210,7 @@ struct CodexCircularLimitsWidgetView: View {
                     .foregroundStyle(.secondary)
             } else {
                 Spacer()
-                Text("Weekly limit unavailable")
+                Text("Weekly allotment unavailable")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()

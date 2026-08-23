@@ -571,11 +571,15 @@ struct CodexLimitsWidgetView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
+                        .frame(
+                            maxWidth: .infinity,
+                            alignment: family == .systemSmall ? .center : .leading
+                        )
                 }
             }
         }
-        .padding(.vertical, family == .systemSmall ? 10 : 6)
-        .padding(.horizontal, 2)
+        .padding(.vertical, family == .systemSmall ? 12 : 6)
+        .padding(.horizontal, family == .systemSmall ? 8 : 2)
         .containerBackground(.background, for: .widget)
     }
 
@@ -615,9 +619,6 @@ struct CodexLimitsWidgetView: View {
                 }
             }
         } else if let weeklyPace, let weeklyWindow {
-            if let primary = smallPrimaryWindow {
-                LimitRow(window: primary, resetDisplayStyle: resetDisplayStyle)
-            }
             SmallWeeklyPaceRow(
                 window: weeklyWindow,
                 pace: weeklyPace,
@@ -632,13 +633,16 @@ struct CodexLimitsWidgetView: View {
     }
 
     private var visibleWindows: [LimitWindow] {
+        let candidates = family == .systemSmall
+            ? entry.limits.windows.filter { !isSpark($0) }
+            : entry.limits.windows
         let maximum: Int
         if family == .systemSmall {
             maximum = entry.limits.resetCredits == nil ? 2 : 1
         } else {
             maximum = 4
         }
-        return Array(entry.limits.windows.prefix(maximum))
+        return Array(candidates.prefix(maximum))
     }
 
     private var mediumColumns: [GridItem] {
@@ -649,11 +653,7 @@ struct CodexLimitsWidgetView: View {
     }
 
     private var weeklyWindow: LimitWindow? {
-        entry.limits.windows.first(where: { $0.durationMinutes == 10_080 })
-    }
-
-    private var smallPrimaryWindow: LimitWindow? {
-        entry.limits.windows.first(where: { $0.durationMinutes != 10_080 })
+        entry.limits.windows.first(where: { $0.durationMinutes == 10_080 && !isSpark($0) })
     }
 
     private var standardWeeklyWindow: LimitWindow? {
@@ -710,6 +710,8 @@ struct CodexLimitsWidgetView: View {
 }
 
 struct WeeklyPace {
+    static let dailyAllowanceFraction = 0.15
+
     let usedFraction: Double
     let targetFraction: Double
 
@@ -736,6 +738,17 @@ struct WeeklyPace {
         abs(differencePoints) <= 2
     }
 
+    var dailyAllowanceUsedFraction: Double {
+        let remainingFraction = 1 - usedFraction
+        return min(
+            1,
+            max(
+                0,
+                (Self.dailyAllowanceFraction - remainingFraction) / Self.dailyAllowanceFraction
+            )
+        )
+    }
+
     var statusText: String {
         if isOnPace {
             return "on pace"
@@ -754,46 +767,80 @@ struct WeeklyPace {
     }
 }
 
+enum WeeklyPaceScale {
+    static let greenFraction = 0.7
+    static let yellowFraction = 0.2
+    static let redFraction = 0.1
+    static let circularMarkerInset = 0.02
+    static let gaugeArcFraction = 0.75
+    static let gaugeStartRotation = 135.0
+
+    static func markerFraction(for pace: WeeklyPace) -> Double {
+        circularMarkerInset
+            + (1 - 2 * circularMarkerInset) * pace.dailyAllowanceUsedFraction
+    }
+
+    static func gaugeMarkerFraction(for pace: WeeklyPace) -> Double {
+        gaugeArcFraction * markerFraction(for: pace)
+    }
+}
+
 struct WeeklyPaceGauge: View {
     let pace: WeeklyPace
-    var compact = false
 
     var body: some View {
-        VStack(spacing: 2) {
-            if !compact {
-                Text("USAGE PACE")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            ZStack {
-                Circle()
-                    .stroke(.secondary.opacity(0.18), lineWidth: compact ? 4 : 5)
-                Circle()
-                    .trim(from: 0, to: pace.targetFraction)
-                    .stroke(
-                        .blue.opacity(0.45),
-                        style: StrokeStyle(lineWidth: compact ? 2 : 3, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                Circle()
-                    .trim(from: 0, to: pace.usedFraction)
-                    .stroke(
-                        pace.tint,
-                        style: StrokeStyle(lineWidth: compact ? 4 : 5, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                Text(pace.statusText)
-                    .font((compact ? Font.system(size: 8) : .caption2).weight(.bold).monospacedDigit())
-                    .foregroundStyle(pace.tint)
-            }
-            .frame(width: compact ? 34 : 44, height: compact ? 34 : 44)
+        ZStack {
+            Circle()
+                .trim(
+                    from: 0,
+                    to: WeeklyPaceScale.gaugeArcFraction * WeeklyPaceScale.greenFraction
+                )
+                .stroke(.green.opacity(0.82), style: StrokeStyle(lineWidth: 12, lineCap: .butt))
+                .rotationEffect(.degrees(WeeklyPaceScale.gaugeStartRotation))
+            Circle()
+                .trim(
+                    from: WeeklyPaceScale.gaugeArcFraction * WeeklyPaceScale.greenFraction,
+                    to: WeeklyPaceScale.gaugeArcFraction
+                        * (WeeklyPaceScale.greenFraction + WeeklyPaceScale.yellowFraction)
+                )
+                .stroke(.yellow.opacity(0.9), style: StrokeStyle(lineWidth: 12, lineCap: .butt))
+                .rotationEffect(.degrees(WeeklyPaceScale.gaugeStartRotation))
+            Circle()
+                .trim(
+                    from: WeeklyPaceScale.gaugeArcFraction
+                        * (WeeklyPaceScale.greenFraction + WeeklyPaceScale.yellowFraction),
+                    to: WeeklyPaceScale.gaugeArcFraction
+                )
+                .stroke(.red.opacity(0.82), style: StrokeStyle(lineWidth: 12, lineCap: .butt))
+                .rotationEffect(.degrees(WeeklyPaceScale.gaugeStartRotation))
+            Circle()
+                .trim(
+                    from: WeeklyPaceScale.gaugeMarkerFraction(for: pace) - 0.004,
+                    to: WeeklyPaceScale.gaugeMarkerFraction(for: pace) + 0.004
+                )
+                .stroke(.primary, style: StrokeStyle(lineWidth: 12, lineCap: .butt))
+                .rotationEffect(.degrees(WeeklyPaceScale.gaugeStartRotation))
         }
+        .frame(width: 94, height: 94)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Weekly allotment is \(pace.statusText)")
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        if pace.dailyAllowanceUsedFraction < WeeklyPaceScale.greenFraction {
+            return "Usage pace is in the green zone"
+        }
+        if pace.dailyAllowanceUsedFraction
+            < WeeklyPaceScale.greenFraction + WeeklyPaceScale.yellowFraction {
+            return "Usage pace is in the yellow zone"
+        }
+        return "Usage pace is in the red zone"
     }
 }
 
 struct WeeklyPaceBar: View {
+    private static let indicatorInset: CGFloat = 3
+
     let pace: WeeklyPace
     var compact = false
 
@@ -802,12 +849,6 @@ struct WeeklyPaceBar: View {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("Usage Pace")
                     .font(.caption2.weight(.semibold))
-                if !pace.isOnPace {
-                    Spacer(minLength: 2)
-                    Text(pacePercentageLabel)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.primary)
-                }
             }
             HStack(spacing: 6) {
                 ProgressView(value: 1, total: 1)
@@ -842,13 +883,7 @@ struct WeeklyPaceBar: View {
                             }
                         }
                     }
-                if !pace.isOnPace {
-                    Text(paceStatusLabel)
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(pace.tint)
-                        .lineLimit(1)
-                        .frame(width: 44, alignment: .trailing)
-                } else {
+                if !compact {
                     Color.clear
                         .frame(width: 44)
                         .accessibilityHidden(true)
@@ -859,31 +894,27 @@ struct WeeklyPaceBar: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    private var pacePercentageLabel: String {
-        "\(abs(pace.differencePoints))%"
-    }
-
-    private var paceStatusLabel: String {
-        pace.differencePoints > 0 ? "Over" : "Under"
-    }
-
     private var accessibilityText: String {
-        if pace.isOnPace {
-            return "Weekly allotment is on pace"
+        if pace.dailyAllowanceUsedFraction < WeeklyPaceScale.greenFraction {
+            return "Usage pace is in the green zone"
         }
-        return "Weekly allotment is \(pace.statusText) by \(abs(pace.differencePoints)) percentage points"
+        if pace.dailyAllowanceUsedFraction
+            < WeeklyPaceScale.greenFraction + WeeklyPaceScale.yellowFraction {
+            return "Usage pace is in the yellow zone"
+        }
+        return "Usage pace is in the red zone"
     }
 
     private var greenFraction: Double {
-        60.0 / 90.0
+        WeeklyPaceScale.greenFraction
     }
 
     private var yellowFraction: Double {
-        20.0 / 90.0
+        WeeklyPaceScale.yellowFraction
     }
 
     private var redFraction: Double {
-        10.0 / 90.0
+        WeeklyPaceScale.redFraction
     }
 
     private func zoneWidth(_ fraction: Double, in width: CGFloat) -> CGFloat {
@@ -892,7 +923,9 @@ struct WeeklyPaceBar: View {
     }
 
     private func indicatorOffset(in width: CGFloat) -> CGFloat {
-        min(max(0, width - 2), max(0, width * pace.usedFraction - 1))
+        let minimum = Self.indicatorInset
+        let maximum = max(minimum, width - 2 - Self.indicatorInset)
+        return minimum + (maximum - minimum) * pace.dailyAllowanceUsedFraction
     }
 }
 
@@ -903,17 +936,23 @@ struct SmallWeeklyPaceRow: View {
     let resetDisplayStyle: ResetDisplayStyle
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("Weekly Allotment")
+                Text("Weekly")
                     .font(.caption.weight(.semibold))
                 Spacer(minLength: 0)
-                if let resetDate = window.resetDate {
-                    Text(resetText(for: resetDate))
-                        .font(.system(size: 8).monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                Text(percentText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            ProgressView(value: Double(window.remainingPercent ?? 0), total: 100)
+                .tint(usageTint)
+            if let resetDate = window.resetDate {
+                Text(resetText(for: resetDate))
+                    .font(.system(size: 8).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             WeeklyPaceBar(pace: pace, compact: true)
             if let credits {
@@ -923,6 +962,17 @@ struct SmallWeeklyPaceRow: View {
                     .lineLimit(1)
             }
         }
+    }
+
+    private var percentText: String {
+        window.remainingPercent.map { "\($0)% left" } ?? "unknown"
+    }
+
+    private var usageTint: Color {
+        guard let remaining = window.remainingPercent else { return .gray }
+        if remaining <= 15 { return .red }
+        if remaining <= 35 { return .orange }
+        return .green
     }
 
     private func resetText(for date: Date) -> String {
@@ -1137,21 +1187,6 @@ struct CodexLimitsWidget: Widget {
     }
 }
 
-struct CodexLimitsResetTimesWidget: Widget {
-    let kind = "CodexLimitsResetTimesWidget"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: CodexLimitsProvider()) { entry in
-            CodexLimitsWidgetView(entry: entry, resetDisplayStyle: .absolute)
-        }
-        .configurationDisplayName("Codex Reset Times")
-        .description("Shows Codex usage reset times and available Full Reset credits.")
-        .supportedFamilies([.systemSmall, .systemMedium])
-    }
-}
-
-// Keep this kind registered so existing desktop instances from versions that
-// offered the ring widget continue to render instead of becoming orphaned.
 struct CodexCircularLimitsWidget: Widget {
     let kind = "CodexCircularLimitsWidget"
 
@@ -1159,8 +1194,8 @@ struct CodexCircularLimitsWidget: Widget {
         StaticConfiguration(kind: kind, provider: CodexLimitsProvider()) { entry in
             CodexCircularLimitsWidgetView(entry: entry)
         }
-        .configurationDisplayName("Codex Usage Pace")
-        .description("Shows whether the weekly Codex allotment is on track to run out before reset.")
+        .configurationDisplayName("Usage Pace")
+        .description("Shows weekly usage and the forward-looking 24-hour pace scale.")
         .supportedFamilies([.systemSmall])
     }
 }
@@ -1169,11 +1204,11 @@ struct CodexCircularLimitsWidgetView: View {
     let entry: CodexLimitsEntry
 
     var body: some View {
-        VStack(spacing: 5) {
-            HStack {
-                Text("Weekly Allotment")
-                    .font(.caption.weight(.semibold))
-                Spacer()
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Codex")
+                    .font(.headline.weight(.semibold))
+                Spacer(minLength: 6)
                 if let plan = entry.limits.plan {
                     Text(plan.uppercased())
                         .font(.caption2.weight(.semibold))
@@ -1188,26 +1223,32 @@ struct CodexCircularLimitsWidgetView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(4)
                 Spacer()
-            } else if let pace {
+            } else if let window = weeklyWindow, let pace {
+                Text("Usage Pace")
+                    .font(.caption.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, -1)
+                    .padding(.bottom, 8)
                 ZStack {
-                    Circle()
-                        .stroke(.secondary.opacity(0.18), lineWidth: 10)
-                    Circle()
-                        .trim(from: 0, to: pace.targetFraction)
-                        .stroke(.blue.opacity(0.45), style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                    Circle()
-                        .trim(from: 0, to: pace.usedFraction)
-                        .stroke(pace.tint, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                    Text(pace.statusText)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(pace.tint)
+                    WeeklyPaceGauge(pace: pace)
+                    VStack(spacing: -1) {
+                        Text("\(window.remainingPercent ?? 0)%")
+                            .font(.title3.weight(.bold).monospacedDigit())
+                        Text("Allotment")
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Text("Left")
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .padding(2)
-                Text(usageText)
-                    .font(.system(size: 8).monospacedDigit())
-                    .foregroundStyle(.secondary)
+                if let resetDate = window.resetDate {
+                    Text("resets in \(relativeTime(until: resetDate))")
+                        .font(.system(size: 8).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.top, 5)
+                }
             } else {
                 Spacer()
                 Text("Weekly allotment unavailable")
@@ -1216,23 +1257,28 @@ struct CodexCircularLimitsWidgetView: View {
                 Spacer()
             }
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 2)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
         .containerBackground(.background, for: .widget)
-        .accessibilityElement(children: .combine)
     }
 
     private var weeklyWindow: LimitWindow? {
-        entry.limits.windows.first(where: { $0.durationMinutes == 10_080 })
+        entry.limits.windows.first(where: {
+            $0.durationMinutes == 10_080
+                && !$0.name.localizedCaseInsensitiveContains("spark")
+        })
     }
 
     private var pace: WeeklyPace? {
         weeklyWindow.flatMap { WeeklyPace(window: $0, now: entry.date) }
     }
 
-    private var usageText: String {
-        guard let window = weeklyWindow, let pace else { return "" }
-        return "\(window.usedPercent ?? 0)% used · \(Int((pace.targetFraction * 100).rounded()))% target"
+    private func relativeTime(until date: Date) -> String {
+        let seconds = max(0, Int(date.timeIntervalSinceNow))
+        let days = seconds / 86_400
+        let hours = (seconds % 86_400) / 3_600
+        if days > 0 { return "\(days)d \(hours)h" }
+        return "\(hours)h"
     }
 }
 
@@ -1240,7 +1286,6 @@ struct CodexCircularLimitsWidgetView: View {
 struct CodexLimitsWidgetBundle: WidgetBundle {
     var body: some Widget {
         CodexLimitsWidget()
-        CodexLimitsResetTimesWidget()
         CodexCircularLimitsWidget()
     }
 }

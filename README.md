@@ -54,15 +54,19 @@ The script:
 - opens the host app.
 
 After installation, open the macOS widget gallery and search for `Codex Limits`.
-The app provides small and medium versions of `Codex Limits`, which shows
-relative reset times, and `Codex Reset Times`, which shows the clock time or
-date when limits reset. Both widgets show every usage bucket returned by Codex.
-When available, they also show Full Reset credits and their expirations.[^gatekeeper]
-Small and medium widgets include a usage pace bar. It compares the percentage
-of the weekly allotment used with the percentage of the seven-day window that
-has elapsed, showing whether usage is under, on, or over pace to exhaust the
-allotment. The small `Codex Usage Pace` ring also remains available for
-compatibility with existing desktop instances.
+The app provides small and medium versions of `Codex Limits` and a small
+`Usage Pace` gauge. Small widgets focus on the standard weekly allotment
+and usage pace; Spark buckets are reserved for the detailed medium widget. When
+available, the widgets also show Full Reset credits and their
+expirations.[^gatekeeper]
+
+Small and medium `Codex Limits` widgets include a usage pace bar based on a
+forward-looking 24-hour allowance of 15% of the weekly allotment. While more
+than 15% remains, the marker stays near the left edge. As the remaining
+allotment falls through that final 15%, the marker advances through a green 70%
+zone, a yellow 20% zone, and a red 10% zone.
+The gauge uses the same scale and marker calculation around a three-quarter
+tachometer-style arc.
 
 ## Authentication
 

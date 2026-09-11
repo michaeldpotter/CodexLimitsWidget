@@ -710,8 +710,6 @@ struct CodexLimitsWidgetView: View {
 }
 
 struct WeeklyPace {
-    static let dailyAllowanceFraction = 0.15
-
     let usedFraction: Double
     let targetFraction: Double
 
@@ -738,15 +736,11 @@ struct WeeklyPace {
         abs(differencePoints) <= 2
     }
 
-    var dailyAllowanceUsedFraction: Double {
-        let remainingFraction = 1 - usedFraction
-        return min(
-            1,
-            max(
-                0,
-                (Self.dailyAllowanceFraction - remainingFraction) / Self.dailyAllowanceFraction
-            )
-        )
+    /// A sustainable pace sits at 60%; 1.5× that pace reaches the red zone.
+    var markerFraction: Double {
+        guard usedFraction > 0 else { return 0 }
+        guard targetFraction > 0 else { return 1 }
+        return min(1, 0.6 * usedFraction / targetFraction)
     }
 
     var statusText: String {
@@ -777,7 +771,7 @@ enum WeeklyPaceScale {
 
     static func markerFraction(for pace: WeeklyPace) -> Double {
         circularMarkerInset
-            + (1 - 2 * circularMarkerInset) * pace.dailyAllowanceUsedFraction
+            + (1 - 2 * circularMarkerInset) * pace.markerFraction
     }
 
     static func gaugeMarkerFraction(for pace: WeeklyPace) -> Double {
@@ -827,10 +821,10 @@ struct WeeklyPaceGauge: View {
     }
 
     private var accessibilityText: String {
-        if pace.dailyAllowanceUsedFraction < WeeklyPaceScale.greenFraction {
+        if pace.markerFraction < WeeklyPaceScale.greenFraction {
             return "Usage pace is in the green zone"
         }
-        if pace.dailyAllowanceUsedFraction
+        if pace.markerFraction
             < WeeklyPaceScale.greenFraction + WeeklyPaceScale.yellowFraction {
             return "Usage pace is in the yellow zone"
         }
@@ -839,7 +833,7 @@ struct WeeklyPaceGauge: View {
 }
 
 struct WeeklyPaceBar: View {
-    private static let indicatorInset: CGFloat = 3
+    private static let indicatorWidth: CGFloat = 8
 
     let pace: WeeklyPace
     var compact = false
@@ -851,38 +845,37 @@ struct WeeklyPaceBar: View {
                     .font(.caption2.weight(.semibold))
             }
             HStack(spacing: 6) {
-                ProgressView(value: 1, total: 1)
-                    .opacity(0)
-                    .overlay {
-                        GeometryReader { geometry in
-                            ZStack(alignment: .leading) {
-                                HStack(spacing: 1) {
-                                    Rectangle()
-                                        .fill(.green.opacity(0.82))
-                                        .frame(width: zoneWidth(greenFraction, in: geometry.size.width))
-                                    if yellowFraction > 0 {
-                                        Rectangle()
-                                            .fill(.yellow.opacity(0.9))
-                                            .frame(width: zoneWidth(yellowFraction, in: geometry.size.width))
-                                    }
-                                    if redFraction > 0 {
-                                        Rectangle()
-                                            .fill(.red.opacity(0.82))
-                                            .frame(width: zoneWidth(redFraction, in: geometry.size.width))
-                                    }
-                                }
-                                Rectangle()
-                                    .fill(.primary)
-                                    .frame(width: 2)
-                                    .offset(x: indicatorOffset(in: geometry.size.width))
-                            }
-                            .clipShape(Capsule())
-                            .overlay {
-                                Capsule()
-                                    .stroke(.secondary.opacity(0.2), lineWidth: 0.5)
-                            }
+                GeometryReader { geometry in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 1) {
+                            Rectangle()
+                                .fill(.green.opacity(0.82))
+                                .frame(width: zoneWidth(greenFraction, in: geometry.size.width))
+                            Rectangle()
+                                .fill(.yellow.opacity(0.9))
+                                .frame(width: zoneWidth(yellowFraction, in: geometry.size.width))
+                            Rectangle()
+                                .fill(.red.opacity(0.82))
+                                .frame(width: zoneWidth(redFraction, in: geometry.size.width))
                         }
+                        .frame(height: 4)
+                        .clipShape(Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(.secondary.opacity(0.2), lineWidth: 0.5)
+                        }
+                        Path { path in
+                            path.move(to: CGPoint(x: Self.indicatorWidth / 2, y: 0))
+                            path.addLine(to: CGPoint(x: Self.indicatorWidth, y: 6))
+                            path.addLine(to: CGPoint(x: 0, y: 6))
+                            path.closeSubpath()
+                        }
+                        .fill(.primary)
+                        .frame(width: Self.indicatorWidth, height: 6)
+                        .offset(x: indicatorOffset(in: geometry.size.width))
                     }
+                }
+                .frame(height: 12)
                 if !compact {
                     Color.clear
                         .frame(width: 44)
@@ -895,10 +888,10 @@ struct WeeklyPaceBar: View {
     }
 
     private var accessibilityText: String {
-        if pace.dailyAllowanceUsedFraction < WeeklyPaceScale.greenFraction {
+        if pace.markerFraction < WeeklyPaceScale.greenFraction {
             return "Usage pace is in the green zone"
         }
-        if pace.dailyAllowanceUsedFraction
+        if pace.markerFraction
             < WeeklyPaceScale.greenFraction + WeeklyPaceScale.yellowFraction {
             return "Usage pace is in the yellow zone"
         }
@@ -923,9 +916,8 @@ struct WeeklyPaceBar: View {
     }
 
     private func indicatorOffset(in width: CGFloat) -> CGFloat {
-        let minimum = Self.indicatorInset
-        let maximum = max(minimum, width - 2 - Self.indicatorInset)
-        return minimum + (maximum - minimum) * pace.dailyAllowanceUsedFraction
+        let maximum = max(0, width - Self.indicatorWidth)
+        return maximum * pace.markerFraction
     }
 }
 
@@ -1195,7 +1187,7 @@ struct CodexCircularLimitsWidget: Widget {
             CodexCircularLimitsWidgetView(entry: entry)
         }
         .configurationDisplayName("Usage Pace")
-        .description("Shows weekly usage and the forward-looking 24-hour pace scale.")
+        .description("Shows weekly usage relative to the time elapsed before reset.")
         .supportedFamilies([.systemSmall])
     }
 }

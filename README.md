@@ -60,13 +60,16 @@ and usage pace; Spark buckets are reserved for the detailed medium widget. When
 available, the widgets also show Full Reset credits and their
 expirations.[^gatekeeper]
 
-Small and medium `Codex Limits` widgets include a usage pace bar based on a
-forward-looking 24-hour allowance of 15% of the weekly allotment. While more
-than 15% remains, the marker stays near the left edge. As the remaining
-allotment falls through that final 15%, the marker advances through a green 70%
-zone, a yellow 20% zone, and a red 10% zone.
+Small and medium `Codex Limits` widgets include a usage pace bar comparing the
+fraction of the weekly allotment used with the fraction of the week elapsed.
+A sustainable pace (for example, 50% used halfway through the week) places the
+marker at 60% of the scale, within green. Yellow begins around 1.17× sustainable
+pace; red begins at 1.5×. With 28% left and nearly four days until reset, the
+marker is in red because usage is running about 1.6× sustainable pace.
+As time passes without more usage, the marker moves back toward green.
 The gauge uses the same scale and marker calculation around a three-quarter
-tachometer-style arc.
+tachometer-style arc. This is an average since the start of the weekly window,
+not a measurement of recent activity.
 
 ## Authentication
 

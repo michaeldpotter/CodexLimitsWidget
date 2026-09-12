@@ -61,15 +61,21 @@ available, the widgets also show Full Reset credits and their
 expirations.[^gatekeeper]
 
 Small and medium `Codex Limits` widgets include a usage pace bar comparing the
-fraction of the weekly allotment used with the fraction of the week elapsed.
-A sustainable pace (for example, 50% used halfway through the week) places the
-marker at 60% of the scale, within green. Yellow begins around 1.17× sustainable
-pace; red begins at 1.5×. With 28% left and nearly four days until reset, the
-marker is in red because usage is running about 1.6× sustainable pace.
-As time passes without more usage, the marker moves back toward green.
-The gauge uses the same scale and marker calculation around a three-quarter
-tachometer-style arc. This is an average since the start of the weekly window,
-not a measurement of recent activity.
+original daily budget with the daily budget still available until weekly reset.
+The marker is `0.6 × fraction of week remaining / fraction of allotment remaining`,
+capped at 100%. Balanced usage (for example, 50% used halfway through the week)
+places the marker at 60% of the scale, within green. Yellow begins when the
+remaining daily allowance is about 14% below the original daily budget; red
+begins when it is one-third below. These are indicator thresholds, not service limits.
+
+With 92% left and 6 days 19 hours until reset, about 13.6% per day remains
+available versus the original 14.3% per day, so the marker stays green. With
+only 5% left and a full day remaining, it reaches red. As time passes without
+more usage, the marker moves back toward green. Exhausted allotments stay red
+until reset; expired windows have no pace indicator until fresh data arrives.
+The small gauge uses the same calculation around a three-quarter tachometer-style
+arc. This measures remaining budget pressure, not recent activity or a prediction
+of future usage.
 
 ## Authentication
 

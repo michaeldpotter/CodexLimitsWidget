@@ -717,6 +717,7 @@ struct WeeklyPace {
         guard
             let usedPercent = window.usedPercent,
             let resetDate = window.resetDate,
+            resetDate > now,
             let durationMinutes = window.durationMinutes,
             durationMinutes > 0
         else {
@@ -728,36 +729,12 @@ struct WeeklyPace {
         targetFraction = min(1, max(0, 1 - remainingFraction))
     }
 
-    var differencePoints: Int {
-        Int(((usedFraction - targetFraction) * 100).rounded())
-    }
-
-    var isOnPace: Bool {
-        abs(differencePoints) <= 2
-    }
-
-    /// A sustainable pace sits at 60%; 1.5× that pace reaches the red zone.
+    /// Compares the original daily budget with the daily budget still available.
+    /// Balanced usage sits at 60%; needing a one-third reduction reaches red.
     var markerFraction: Double {
-        guard usedFraction > 0 else { return 0 }
-        guard targetFraction > 0 else { return 1 }
-        return min(1, 0.6 * usedFraction / targetFraction)
-    }
-
-    var statusText: String {
-        if isOnPace {
-            return "on pace"
-        }
-        return differencePoints > 0 ? "over pace" : "under pace"
-    }
-
-    var tint: Color {
-        if differencePoints > 20 {
-            return .red
-        }
-        if differencePoints > 2 {
-            return .orange
-        }
-        return .green
+        let remainingUsage = 1 - usedFraction
+        guard remainingUsage > 0 else { return 1 }
+        return min(1, 0.6 * (1 - targetFraction) / remainingUsage)
     }
 }
 

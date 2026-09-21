@@ -1,20 +1,22 @@
-# CodexLimitsWidget[^vibe]
+# AI Usage[^vibe]
 
 ![preview](Resources/preview.jpeg)
 
-A native macOS app with a WidgetKit desktop widget that shows the remaining
-Codex limits without opening an interactive Codex CLI session.
+Native macOS widgets for Codex and Claude usage, with weekly pace indicators,
+reset times, and a combined side-by-side view. Formerly named Codex Limits.
 
 The widget uses `codex app-server` and the `account/rateLimits/read` method, so
 it reads the same source of data that backs `/status` in the Codex CLI.
 
-**CodexLimitsWidget is an independent project and is not affiliated with,
-endorsed by, or sponsored by OpenAI.**
+**AI Usage is an independent project and is not affiliated with,
+endorsed by, or sponsored by OpenAI or Anthropic.**
 
 ## Contents
 
 - `Sources/CodexLimitsHost.swift` - a small host app that syncs an auth snapshot.
 - `Sources/CodexLimitsWidget.swift` - the WidgetKit extension that reads and renders limits.
+- `Sources/MediumLimitsView.swift` - the side-by-side Codex and Claude layout.
+- `Sources/ClaudeUsage.swift` / `ClaudeUsageClient.swift` - Claude usage snapshots and host-side fetching.
 - `Resources` - `Info.plist`, entitlements, and the app/widget icon.
 - `codex-limits` - a CLI script for printing limits without the interactive TUI.
 - `build-widget.sh` - builds the `.app` bundle.
@@ -36,7 +38,7 @@ endorsed by, or sponsored by OpenAI.**
 The app bundle is created at:
 
 ```text
-build/Codex Limits.app
+build/AI Usage.app
 ```
 
 ## Install
@@ -48,19 +50,27 @@ build/Codex Limits.app
 The script:
 
 - rebuilds the app;
-- installs it to `/Applications/Codex Limits.app`;
-- removes the old `/Applications/CodexLimits.app` bundle if it is still present;
+- installs it to `/Applications/AI Usage.app`;
+- removes the old `/Applications/Codex Limits.app` and `/Applications/CodexLimits.app` bundles if present;
 - registers the app through Launch Services;
 - opens the host app.
 
-After installation, open the macOS widget gallery and search for `Codex Limits`.
-The app provides small and medium versions of `Codex Limits` and a small
-`Usage Pace` gauge. Small widgets focus on the standard weekly allotment
-and usage pace; Spark buckets are reserved for the detailed medium widget. When
-available, the widgets also show Full Reset credits and their
-expirations.[^gatekeeper]
+After installation, open the macOS widget gallery and search for `AI Usage`.
+The app provides a combined `AI Usage` widget, individual small `Codex Limits`
+and `Claude Limits` widgets, and the small `Usage Pace` gauge. Existing widgets
+and saved data remain connected: bundle identifiers, widget kinds, and storage
+paths are unchanged. The original combined entry also keeps its small size for
+compatibility with existing Codex widgets.
 
-Small and medium `Codex Limits` widgets include a usage pace bar comparing the
+The Claude widget uses the existing host refresh and does not need a Codex
+connection. Small widgets focus on the standard weekly allotment
+and usage pace. The medium widget shows Codex weekly usage, pace, and Full Reset
+count and expiration dates on the left, with Claude five-hour and weekly usage
+on the right. Both columns show the percentage remaining and reset times. A
+single update time sits at the lower right and uses the older provider timestamp
+when both are available.[^gatekeeper]
+
+The Codex and Claude widgets include a usage pace bar comparing the
 original daily budget with the daily budget still available until weekly reset.
 The marker is `0.6 × fraction of week remaining / fraction of allotment remaining`,
 capped at 100%. Balanced usage (for example, 50% used halfway through the week)
@@ -81,8 +91,8 @@ of future usage.
 
 The WidgetKit extension runs in a sandbox and does not read the user's
 `~/.codex/auth.json` directly. Instead, the host app copies a short auth snapshot
-into the widget extension's Application Support directory on launch and when the
-`Refresh Widget` button is pressed. The container location is resolved at runtime
+into the widget extension's Application Support directory on launch, every five
+minutes while running, and when the `Refresh Widget` button is pressed. The container location is resolved at runtime
 from the bundled widget extension.
 
 The snapshot stores only:
@@ -94,12 +104,43 @@ The snapshot stores only:
 
 The refresh token is not copied.
 
+### Claude usage
+
+Sign in to Claude Code with your Claude subscription, then open the host app or
+press `Refresh Widget`. The host reads the default macOS `Claude Code-credentials`
+Keychain entry and calls Claude's OAuth usage endpoint. It reads the current
+access token on each refresh; it does not refresh tokens or modify Claude Code's
+credentials. API-key billing, custom Claude config directories, and alternate
+credential stores are not supported.
+
+Only the subscription tier, five-hour and weekly usage percentages, reset times, update time, and
+safe error messages are written to `claude-usage.json` in the widget container.
+Claude credentials stay in memory and are never copied to the widget. Claude's
+OAuth usage endpoint is an internal interface and may change independently of
+this app.
+
+The host refreshes every five minutes while running. Closing its window keeps
+updates running; quitting the app or restarting the Mac requires reopening it.
+The widget marks Claude data **Stale** after 15 minutes without a successful
+update, and hides expired-window percentages until fresh data arrives. Each
+provider has its own error display. Authentication failures pause Claude checks
+until you sign in through Claude Code and press `Refresh Widget`; rate limiting
+backs off for at least 15 minutes and respects longer `Retry-After` responses.
+
 ## Refresh cadence
 
 The widget asks WidgetKit to refresh its timeline every 5 minutes. macOS may
 delay or throttle widget updates, so this is a requested cadence rather than a
 strict timer. Opening the host app and pressing `Refresh Widget` forces an
 earlier timeline reload.
+
+## Verification
+
+```sh
+python3 Tests/test_claude_usage.py
+python3 Tests/test_weekly_pace.py
+./build-widget.sh
+```
 
 ## CLI
 
@@ -125,7 +166,7 @@ Show all buckets if the Codex CLI returns more than one:
 
 If the widget appears but does not show limits:
 
-1. Open `/Applications/Codex Limits.app`.
+1. Open `/Applications/AI Usage.app`.
 2. Press `Refresh Widget`.
 3. Make sure the `codex` CLI is authenticated and available from `PATH`.
 4. Rebuild and reinstall:

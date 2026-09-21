@@ -61,6 +61,7 @@ struct CodexLimits {
 struct CodexLimitsEntry: TimelineEntry {
     let date: Date
     let limits: CodexLimits
+    var claude: ClaudeUsageSnapshot = .unavailable
 }
 
 enum ResetDisplayStyle {
@@ -79,13 +80,17 @@ struct CodexLimitsProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (CodexLimitsEntry) -> Void) {
-        completion(CodexLimitsEntry(date: Date(), limits: CodexLimitsReader.read()))
+        completion(CodexLimitsEntry(date: Date(), limits: CodexLimitsReader.read(), claude: claudeUsage()))
+    }
+
+    private func claudeUsage() -> ClaudeUsageSnapshot {
+        .readForWidget()
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<CodexLimitsEntry>) -> Void) {
         DispatchQueue.global(qos: .utility).async {
             let now = Date()
-            let entry = CodexLimitsEntry(date: now, limits: CodexLimitsReader.read())
+            let entry = CodexLimitsEntry(date: now, limits: CodexLimitsReader.read(), claude: claudeUsage())
             let nextRefresh = Calendar.current.date(byAdding: .minute, value: 5, to: now) ?? now.addingTimeInterval(300)
             completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
         }
@@ -159,7 +164,7 @@ struct CodexLimitsReader {
             "params": [
                 "clientInfo": [
                     "name": "codex-limits-widget",
-                    "version": "0.3.7"
+                    "version": "0.3.8"
                 ],
                 "capabilities": [
                     "experimentalApi": true
@@ -519,7 +524,7 @@ enum WidgetError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .authUnavailable:
-            return "open Codex Limits to sync auth"
+            return "open AI Usage to sync auth"
         case .codexNotFound:
             return "codex was not found"
         case .invalidAuthToken:
@@ -542,6 +547,15 @@ struct CodexLimitsWidgetView: View {
     let resetDisplayStyle: ResetDisplayStyle
 
     var body: some View {
+        if family == .systemMedium {
+            MediumLimitsView(entry: entry, resetDisplayStyle: resetDisplayStyle)
+                .containerBackground(.background, for: .widget)
+        } else {
+            smallBody
+        }
+    }
+
+    private var smallBody: some View {
         VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 6) {
             header
             if let error = entry.limits.error {
@@ -585,40 +599,7 @@ struct CodexLimitsWidgetView: View {
 
     @ViewBuilder
     private var windowsView: some View {
-        if family == .systemMedium {
-            VStack(alignment: .leading, spacing: 6) {
-                LazyVGrid(
-                    columns: mediumColumns,
-                    spacing: 6
-                ) {
-                    mediumWindowCell(standardWeeklyWindow)
-                    mediumWindowCell(sparkFiveHourWindow)
-                    if let weeklyPace {
-                        WeeklyPaceBar(pace: weeklyPace)
-                    } else {
-                        Color.clear
-                            .accessibilityHidden(true)
-                    }
-                    mediumWindowCell(sparkWeeklyWindow)
-                    ForEach(Array(additionalMediumWindows.enumerated()), id: \.offset) { _, window in
-                        CompactLimitRow(window: window, resetDisplayStyle: resetDisplayStyle)
-                    }
-                }
-
-                LazyVGrid(columns: mediumColumns, alignment: .leading, spacing: 6) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        if let credits = entry.limits.resetCredits {
-                            ResetCreditRow(summary: credits)
-                        }
-                        Text("Updated \(entry.limits.updatedAt, style: .time)")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.secondary)
-                    }
-                    Color.clear
-                        .accessibilityHidden(true)
-                }
-            }
-        } else if let weeklyPace, let weeklyWindow {
+        if let weeklyPace, let weeklyWindow {
             SmallWeeklyPaceRow(
                 window: weeklyWindow,
                 pace: weeklyPace,
@@ -645,50 +626,12 @@ struct CodexLimitsWidgetView: View {
         return Array(candidates.prefix(maximum))
     }
 
-    private var mediumColumns: [GridItem] {
-        [
-            GridItem(.flexible(), spacing: 8, alignment: .topLeading),
-            GridItem(.flexible(), spacing: 8, alignment: .topLeading)
-        ]
-    }
-
     private var weeklyWindow: LimitWindow? {
         entry.limits.windows.first(where: { $0.durationMinutes == 10_080 && !isSpark($0) })
     }
 
-    private var standardWeeklyWindow: LimitWindow? {
-        visibleWindows.first(where: { $0.durationMinutes == 10_080 && !isSpark($0) })
-    }
-
-    private var sparkFiveHourWindow: LimitWindow? {
-        visibleWindows.first(where: { $0.durationMinutes == 300 && isSpark($0) })
-    }
-
-    private var sparkWeeklyWindow: LimitWindow? {
-        visibleWindows.first(where: { $0.durationMinutes == 10_080 && isSpark($0) })
-    }
-
-    private var additionalMediumWindows: [LimitWindow] {
-        visibleWindows.filter { window in
-            if window.durationMinutes == 10_080 && !isSpark(window) { return false }
-            if window.durationMinutes == 300 && isSpark(window) { return false }
-            if window.durationMinutes == 10_080 && isSpark(window) { return false }
-            return true
-        }
-    }
-
     private func isSpark(_ window: LimitWindow) -> Bool {
         window.name.localizedCaseInsensitiveContains("spark")
-    }
-
-    @ViewBuilder
-    private func mediumWindowCell(_ window: LimitWindow?) -> some View {
-        if let window {
-            CompactLimitRow(window: window, resetDisplayStyle: resetDisplayStyle)
-        } else {
-            Color.clear
-                .accessibilityHidden(true)
-        }
     }
 
     private var weeklyPace: WeeklyPace? {
@@ -1150,9 +1093,24 @@ struct CodexLimitsWidget: Widget {
         StaticConfiguration(kind: kind, provider: CodexLimitsProvider()) { entry in
             CodexLimitsWidgetView(entry: entry, resetDisplayStyle: .relative)
         }
-        .configurationDisplayName("Codex Limits")
-        .description("Shows Codex usage buckets and available Full Reset credits.")
+        .configurationDisplayName("AI Usage")
+        .description("Shows Codex limits and, in the medium widget, Claude usage.")
         .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
+// The original kind retains small support so existing desktop widgets survive the rename.
+// A separate gallery entry keeps the individual Codex widget's descriptive name.
+struct CodexSmallLimitsWidget: Widget {
+    let kind = "CodexSmallLimitsWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: CodexLimitsProvider()) { entry in
+            CodexLimitsWidgetView(entry: entry, resetDisplayStyle: .relative)
+        }
+        .configurationDisplayName("Codex Limits")
+        .description("Shows Codex weekly usage, reset time, and usage pace.")
+        .supportedFamilies([.systemSmall])
     }
 }
 
@@ -1255,6 +1213,8 @@ struct CodexCircularLimitsWidgetView: View {
 struct CodexLimitsWidgetBundle: WidgetBundle {
     var body: some Widget {
         CodexLimitsWidget()
+        CodexSmallLimitsWidget()
         CodexCircularLimitsWidget()
+        ClaudeLimitsWidget()
     }
 }

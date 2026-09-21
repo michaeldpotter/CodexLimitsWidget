@@ -6,14 +6,16 @@ import WidgetKit
 
 @main
 struct CodexLimitsHostApp: App {
+    @StateObject private var refresh = UsageRefreshController()
+
     var body: some Scene {
         WindowGroup {
-            HostView()
+            HostView(refresh: refresh)
         }
         .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("About Codex Limits") {
+                Button("About AI Usage") {
                     AboutPanel.show()
                 }
             }
@@ -27,7 +29,7 @@ enum AboutPanel {
 
     static func show() {
         NSApp.orderFrontStandardAboutPanel(options: [
-            .applicationName: "Codex Limits",
+            .applicationName: "AI Usage",
             .applicationVersion: appVersion,
             .version: buildVersion,
             .credits: credits
@@ -36,16 +38,16 @@ enum AboutPanel {
     }
 
     private static var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.3.7"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.3.8"
     }
 
     private static var buildVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "12"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "27"
     }
 
     private static var credits: NSAttributedString {
         let body = NSMutableAttributedString(
-            string: "A native macOS widget for Codex CLI limits.\n\nGitHub Repository",
+            string: "Native macOS widgets for Codex and Claude usage.\n\nGitHub Repository",
             attributes: [
                 .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
                 .foregroundColor: NSColor.secondaryLabelColor
@@ -65,35 +67,90 @@ enum AboutPanel {
 }
 
 struct HostView: View {
-    @State private var status = "Preparing widget..."
+    @ObservedObject var refresh: UsageRefreshController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Codex Limits")
+            Text("AI Usage")
                 .font(.title2.weight(.semibold))
-            Text(status)
+            Text(refresh.status)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Refresh Widget") {
-                refreshWidget()
+                refresh.refreshWidget()
             }
             .buttonStyle(.borderedProminent)
+            .disabled(refresh.isRefreshing)
+            Text("Claude usage refreshes every 5 minutes while this app is running. You can close this window; quitting the app stops Claude updates.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(24)
         .frame(width: 420, alignment: .leading)
-        .task {
-            refreshWidget()
+    }
+}
+
+@MainActor
+final class UsageRefreshController: ObservableObject {
+    @Published var status = "Preparing widget..."
+    @Published var isRefreshing = false
+    private var timer: Timer?
+    private var claudePaused = false
+    private var nextClaudeAttempt = Date.distantPast
+
+    init() {
+        refreshWidget()
+        timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshWidget(automatic: true) }
         }
     }
 
-    private func refreshWidget() {
-        do {
-            let updatedAt = try AuthSnapshotWriter.write()
+    func refreshWidget(automatic: Bool = false) {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        if !automatic { claudePaused = false }
+        Task {
+            var messages: [String] = []
+            do {
+                _ = try AuthSnapshotWriter.write()
+                messages.append("Codex auth synced.")
+            } catch {
+                messages.append(String(describing: error))
+            }
+            if !claudePaused && Date() >= nextClaudeAttempt {
+                do {
+                    let snapshot: ClaudeUsageSnapshot
+                    do {
+                        snapshot = try await ClaudeUsageClient.fetch()
+                        messages.append("Claude usage updated.")
+                    } catch {
+                        let failure = (error as? ClaudeUsageError) ?? .invalidResponse
+                        switch failure {
+                        case .credentialsUnavailable, .http(401), .http(403): claudePaused = true
+                        case .http(429): nextClaudeAttempt = Date().addingTimeInterval(15 * 60)
+                        case .rateLimited(let until): nextClaudeAttempt = until
+                        default: break
+                        }
+                        snapshot = ClaudeUsageSnapshot(fiveHour: nil, sevenDay: nil, updatedAt: nil,
+                                                       error: failure.description)
+                        messages.append(failure.description)
+                    }
+                    let url = try AuthSnapshotWriter.authSnapshotURL()
+                        .deletingLastPathComponent().appendingPathComponent("claude-usage.json")
+                    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                            withIntermediateDirectories: true)
+                    try JSONEncoder().encode(snapshot).write(to: url, options: .atomic)
+                } catch {
+                    messages.append("Could not save Claude usage for the widget.")
+                }
+            } else {
+                messages.append(claudePaused ? "Claude sign-in needs attention. Refresh after signing in."
+                                : "Claude usage checks are cooling down; retrying automatically.")
+            }
             WidgetCenter.shared.reloadAllTimelines()
-            status = "Widget auth synced at \(DateFormatter.localizedString(from: updatedAt, dateStyle: .none, timeStyle: .short))"
-        } catch {
-            status = String(describing: error)
+            status = messages.joined(separator: "\n")
+            isRefreshing = false
         }
     }
 }
@@ -151,7 +208,7 @@ enum AuthSnapshotWriter {
         )
     }
 
-    private static func authSnapshotURL() throws -> URL {
+    static func authSnapshotURL() throws -> URL {
         let widgetIdentifier = try widgetExtensionBundleIdentifier()
         let libraryURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: realHomeDirectory(), isDirectory: true)
@@ -236,7 +293,7 @@ enum HostError: Error, CustomStringConvertible {
         case .invalidAuthToken:
             return "Codex auth token is invalid. Run `codex login` again."
         case .widgetExtensionUnavailable:
-            return "Codex Limits widget extension is unavailable. Reinstall the app."
+            return "AI Usage widget extension is unavailable. Reinstall the app."
         }
     }
 }

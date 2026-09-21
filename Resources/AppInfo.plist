@@ -13,9 +13,9 @@
     <key>CFBundleIconFile</key>
     <string>CodexLimits.icns</string>
     <key>CFBundleName</key>
-    <string>Codex Limits</string>
+    <string>AI Usage</string>
     <key>CFBundleDisplayName</key>
-    <string>Codex Limits</string>
+    <string>AI Usage</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSupportedPlatforms</key>
@@ -23,16 +23,16 @@
         <string>MacOSX</string>
     </array>
     <key>CFBundleShortVersionString</key>
-    <string>0.3.7</string>
+    <string>0.3.8</string>
     <key>CFBundleVersion</key>
-    <string>20</string>
+    <string>27</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticTermination</key>
-    <true/>
+    <false/>
     <key>NSSupportsSuddenTermination</key>
-    <true/>
+    <false/>
 </dict>
 </plist>

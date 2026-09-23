@@ -17,24 +17,28 @@ func pace(_ used: Int?, _ daysLeft: Double, duration: Int? = 10080) -> WeeklyPac
 func near(_ actual: Double, _ expected: Double) {
     precondition(abs(actual - expected) < 0.000001, "\(actual) != \(expected)")
 }
-// Balanced usage stays at 60% throughout the week.
-for used in [0, 10, 25, 50, 75, 90, 99] {
-    near(pace(used, 7 * (1 - Double(used) / 100))!.markerFraction, 0.6)
+// Fresh resets start at the far left, including an out-of-range future reset.
+near(pace(0, 7)!.markerFraction, 0)
+near(pace(0, 6 + 23.0 / 24)!.markerFraction, 0)
+near(pace(0, 8)!.markerFraction, 0)
+// Six hours of normal allowance softens small early bursts.
+near(pace(1, 7)!.markerFraction, 0.196)
+near(pace(1, 7 - 3.0 / 24)!.markerFraction, 0.196)
+near(pace(1, 7 - 6.0 / 24)!.markerFraction, 0.196)
+precondition(pace(1, 7 - 6.01 / 24)!.markerFraction < 0.196)
+// Balanced usage reaches the green/yellow boundary after the grace period.
+for used in [5, 10, 25, 50, 75, 90, 99] {
+    near(pace(used, 7 * (1 - Double(used) / 100))!.markerFraction,
+         WeeklyPaceScale.greenFraction)
 }
-near(pace(25, 3.5)!.markerFraction, 0.4)
-near(pace(60, 3.5)!.markerFraction, 0.75) // yellow
-near(pace(70, 3.5)!.markerFraction, 1) // red
-// User screenshot: 92% left, 6d 19h remaining; an early burst stays green.
-let screenshot = pace(8, 6 + 19.0 / 24)!
-near(screenshot.markerFraction, 0.6327639751552795)
-precondition(screenshot.markerFraction < WeeklyPaceScale.greenFraction)
-near(pace(8, 6)!.markerFraction, 0.5590062111801242)
-near(pace(8, 4)!.markerFraction, 0.3726708074534161)
-// Late-week scarcity must show red even when average burn is near balanced.
-near(pace(95, 1)!.markerFraction, 1)
-near(pace(72, 3.875)!.markerFraction, 1)
-// More usage increases pressure; idle time reduces it, across the week.
-for daysLeft in [0.25, 1.0, 3.5, 6.0, 7.0] {
+near(pace(25, 3.5)!.markerFraction, 0.35) // below pace: green
+near(pace(60, 3.5)!.markerFraction, 0.84) // 20% above pace: yellow
+near(pace(65, 3.5)!.markerFraction, 0.91) // 30% above pace: red
+near(pace(80, 3.5)!.markerFraction, 1)
+// Average pace deliberately differs from remaining-budget pressure.
+near(pace(95, 1)!.markerFraction, 0.7 * 0.95 / (6.0 / 7))
+// More usage never moves left; idle time never moves right.
+for daysLeft in [0.25, 1.0, 3.5, 6.0, 6.9, 7.0] {
     var previous = 0.0
     for used in 0...100 {
         let current = pace(used, daysLeft)!.markerFraction
@@ -43,9 +47,7 @@ for daysLeft in [0.25, 1.0, 3.5, 6.0, 7.0] {
         previous = current
     }
 }
-near(pace(1, 7)!.markerFraction, 0.6060606060606061)
-near(pace(0, 8)!.markerFraction, 0.6)
-near(pace(-10, 3.5)!.markerFraction, 0.3)
+near(pace(-10, 3.5)!.markerFraction, 0)
 near(pace(120, 3.5)!.markerFraction, 1)
 near(pace(100, 0.001)!.markerFraction, 1)
 // Expired data cannot describe the new week's budget.
@@ -58,10 +60,17 @@ precondition(pace(72, 4, duration: 0) == nil)
 precondition(pace(72, 4, duration: -1) == nil)
 precondition(WeeklyPace(window: LimitWindow(name: "Weekly", usedPercent: 72,
     resetDate: nil, durationMinutes: 10080), now: now) == nil)
-// Respect supplied window length, and share the model with the circular gauge.
-near(pace(50, 0.5, duration: 1440)!.markerFraction, 0.6)
-near(WeeklyPaceScale.markerFraction(for: screenshot), 0.6274534161490684)
-near(WeeklyPaceScale.gaugeMarkerFraction(for: screenshot), 0.4705900621118013)
+// Respect supplied window length, including windows shorter than the grace period.
+near(pace(50, 0.5, duration: 1440)!.markerFraction, 0.7)
+near(pace(1, 1, duration: 1440)!.markerFraction, 0.028)
+near(pace(50, 1.0 / 24, duration: 60)!.markerFraction, 0.35)
+// Both renderers share the same model; the gauge keeps its visual end inset.
+let fresh = pace(0, 7)!
+near(WeeklyPaceScale.markerFraction(for: fresh), 0.02)
+near(WeeklyPaceScale.gaugeMarkerFraction(for: fresh), 0.015)
+let balanced = pace(50, 3.5)!
+near(WeeklyPaceScale.markerFraction(for: balanced), 0.692)
+near(WeeklyPaceScale.gaugeMarkerFraction(for: balanced), 0.519)
 print("Weekly pace regression checks passed")
 '''
 with tempfile.TemporaryDirectory(prefix="weekly-pace-") as directory:

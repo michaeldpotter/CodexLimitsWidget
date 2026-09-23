@@ -70,24 +70,22 @@ on the right. Both columns show the percentage remaining and reset times. A
 single update time sits at the lower right and uses the older provider timestamp
 when both are available.[^gatekeeper]
 
-The Codex and Claude widgets include a usage pace bar comparing the fraction of
-allotment used with the fraction of the weekly window elapsed. A fresh allotment
-starts at the far left. After a six-hour startup grace period, balanced usage
-(for example, 50% used halfway through the week) puts the marker at the
-green/yellow boundary, 70% across the scale. Slower usage stays green; faster
-usage moves through yellow into red at about 1.29 times the even weekly pace.
-These are indicator thresholds, not service limits.
+The Codex and Claude widgets include a usage pace bar comparing the
+original daily budget with the daily budget still available until weekly reset.
+The marker is `0.6 × fraction of week remaining / fraction of allotment remaining`,
+capped at 100%. Balanced usage (for example, 50% used halfway through the week)
+places the marker at 60% of the scale, within green. Yellow begins when the
+remaining daily allowance is about 14% below the original daily budget; red
+begins when it is one-third below. These are indicator thresholds, not service limits.
 
-The marker is `0.7 × used fraction / max(elapsed fraction, six hours / window duration)`,
-capped at 100%. During the first six hours, the denominator stays at six hours'
-normal allowance to soften small early bursts. This is a startup allowance,
-not a rolling measurement of recent activity. With 1% used just after a weekly
-reset, the marker is about 20% across the bar; with no usage, it remains at zero.
-As time passes without more usage, the marker moves left after the grace period.
-Exhausted allotments stay at the far right until reset; expired windows have no
-pace indicator until fresh data arrives. The small gauge uses the same calculation
-around a three-quarter tachometer-style arc. The bar reflects average usage since
-the current window began, not a prediction of future activity.
+With 92% left and 6 days 19 hours until reset, about 13.6% per day remains
+available versus the original 14.3% per day, so the marker stays green. With
+only 5% left and a full day remaining, it reaches red. As time passes without
+more usage, the marker moves back toward green. Exhausted allotments stay red
+until reset; expired windows have no pace indicator until fresh data arrives.
+The small gauge uses the same calculation around a three-quarter tachometer-style
+arc. This measures remaining budget pressure, not recent activity or a prediction
+of future usage.
 
 ## Authentication
 

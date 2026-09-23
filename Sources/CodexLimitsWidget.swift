@@ -654,8 +654,7 @@ struct CodexLimitsWidgetView: View {
 
 struct WeeklyPace {
     let usedFraction: Double
-    let elapsedFraction: Double
-    let startupAllowanceFraction: Double
+    let targetFraction: Double
 
     init?(window: LimitWindow, now: Date) {
         guard
@@ -670,17 +669,15 @@ struct WeeklyPace {
         let duration = TimeInterval(durationMinutes * 60)
         let remainingFraction = resetDate.timeIntervalSince(now) / duration
         usedFraction = min(1, max(0, Double(usedPercent) / 100))
-        elapsedFraction = min(1, max(0, 1 - remainingFraction))
-        // Allow six hours of normal usage before judging an early burst.
-        startupAllowanceFraction = min(1, 6 * 60 * 60 / duration)
+        targetFraction = min(1, max(0, 1 - remainingFraction))
     }
 
-    /// Compares usage with elapsed time, with a six-hour startup allowance.
-    /// Even pacing sits at the green/yellow boundary; a fresh allotment starts at zero.
+    /// Compares the original daily budget with the daily budget still available.
+    /// Balanced usage sits at 60%; needing a one-third reduction reaches red.
     var markerFraction: Double {
-        guard usedFraction < 1 else { return 1 }
-        let allowance = max(elapsedFraction, startupAllowanceFraction)
-        return min(1, WeeklyPaceScale.greenFraction * usedFraction / allowance)
+        let remainingUsage = 1 - usedFraction
+        guard remainingUsage > 0 else { return 1 }
+        return min(1, 0.6 * (1 - targetFraction) / remainingUsage)
     }
 }
 

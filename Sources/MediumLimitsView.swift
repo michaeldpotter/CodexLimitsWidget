@@ -57,8 +57,10 @@ struct MediumLimitsView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                updated
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                if entry.limits.error == nil || entry.claude.updatedAt != nil {
+                    updated
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             }
         }
         .padding(.vertical, 4)

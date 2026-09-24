@@ -26,7 +26,7 @@ struct ClaudeUsageSnapshot: Codable {
 
     static let unavailable = ClaudeUsageSnapshot(
         fiveHour: nil, sevenDay: nil, updatedAt: nil,
-        error: "Open AI Usage to connect Claude."
+        error: "Open Claude Code and sign in, then refresh AI Usage."
     )
 
     func isStale(at now: Date) -> Bool {
@@ -42,9 +42,8 @@ struct ClaudeUsageSnapshot: Codable {
     }
 
     static func readForWidget() -> ClaudeUsageSnapshot {
-        guard let support = FileManager.default.urls(for: .applicationSupportDirectory,
-                                                     in: .userDomainMask).first else { return .unavailable }
-        return .read(from: support.appendingPathComponent("CodexLimits/claude-usage.json"))
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return read(from: directory.appendingPathComponent("CodexLimits/claude-cli-usage.json"))
     }
 
     static func parse(_ data: Data, now: Date = Date(), plan: String? = nil) throws -> ClaudeUsageSnapshot {

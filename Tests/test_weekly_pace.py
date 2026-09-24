@@ -5,7 +5,8 @@ import tempfile
 
 root = Path(__file__).resolve().parents[1]
 source = (root / "Sources/CodexLimitsWidget.swift").read_text()
-window = source[source.index("struct LimitWindow {"):source.index("struct ResetCreditSummary {")]
+model = (root / "Sources/CodexUsage.swift").read_text()
+window = model[model.index("struct LimitWindow:"):model.index("struct ResetCreditSummary:")]
 pace = source[source.index("struct WeeklyPace {"):source.index("struct WeeklyPaceGauge: View {")]
 checks = r'''
 let now = Date(timeIntervalSince1970: 1_000_000)

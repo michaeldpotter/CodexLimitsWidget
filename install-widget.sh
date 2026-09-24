@@ -7,6 +7,9 @@ OLD_APP_TARGET="/Applications/Codex Limits.app"
 LEGACY_APP_TARGET="/Applications/CodexLimits.app"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 "$ROOT/build-widget.sh" >/dev/null
+if /usr/libexec/PlistBuddy -c 'Print :AIUsageBackgroundEnabledBuild' "$APP_TARGET/Contents/Info.plist" >/dev/null 2>&1; then
+  "$APP_TARGET/Contents/MacOS/CodexLimits" --prepare-update
+fi
 pkill -f "$APP_TARGET" 2>/dev/null || true
 pkill -f "$OLD_APP_TARGET" 2>/dev/null || true
 pkill -f "$LEGACY_APP_TARGET" 2>/dev/null || true

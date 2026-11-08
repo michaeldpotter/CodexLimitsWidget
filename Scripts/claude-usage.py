@@ -184,6 +184,23 @@ def fetch(workdir, executable, timeout=50):
         os.close(fd)
 
 
+def subscription_plan(executable):
+    """Read only the plan allowlist from Claude's supported account-status command."""
+    try:
+        status = subprocess.run([executable, 'auth', 'status', '--json'],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                timeout=5, check=True)
+        account = json.loads(status.stdout)
+        if not isinstance(account, dict) or account.get('loggedIn') is not True:
+            return None
+        plan = account.get('subscriptionType')
+        if isinstance(plan, str) and plan in ('pro', 'max', 'team', 'enterprise'):
+            return plan
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    return None
+
+
 def main():
     destination = Path(sys.argv[1])
     background = sys.argv[2] == 'poll'
@@ -199,8 +216,10 @@ def main():
             executable = next((p for p in [str(Path.home()/'.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude'] if os.access(p, os.X_OK)), None)
             if not executable: raise FileNotFoundError('Claude Code missing')
             result = fetch(workdir, executable)
+            plan = subscription_plan(executable)
+            if plan is not None: result['plan'] = plan
         except Exception:
-            result = {k: previous[k] for k in ('fiveHour', 'sevenDay', 'updatedAt') if k in previous}
+            result = {k: previous[k] for k in ('fiveHour', 'sevenDay', 'updatedAt', 'plan') if k in previous}
             result.update(error='Claude usage could not refresh. Open Claude Code, check sign-in, then try Refresh.', nextAttempt=time.time() + 900)
         destination.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(dir=destination.parent, prefix='.claude-usage-')

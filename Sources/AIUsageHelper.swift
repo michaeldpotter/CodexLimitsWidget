@@ -35,7 +35,7 @@ struct AIUsageHelper {
             print("Another Codex operation is in progress.")
             exit(3)
         } catch UsageFailure.missingCodex {
-            print("Install Codex CLI to connect your account.")
+            print("Codex CLI was not found. Open AI Usage and choose its executable, or use automatic detection.")
         } catch UsageFailure.migration {
             print("Could not remove the old credential copy. Check AI Usage's file access.")
         } catch UsageFailure.timeout {

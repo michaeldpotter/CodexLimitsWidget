@@ -158,7 +158,10 @@ background failures back off for 15 minutes. CLI layout changes may require a
 parser update. Reset times have the precision shown by Claude Code. The collector
 uses a dedicated empty directory, disables customizations/tools and auto-updates,
 and bounds each session to 50 seconds plus termination cleanup. Claude and Codex
-fail independently. No raw terminal output is saved.
+fail independently. No raw terminal output is saved. The subscription label comes from Claude Code's
+`auth status --json` command; only recognized plan names are saved. If that
+command is unavailable or reports an unknown plan, usage still refreshes without
+a subscription label.
 
 ## Verification
 
@@ -196,7 +199,15 @@ If the widget appears but does not show limits:
 
 1. Open `/Applications/AI Usage.app`.
 2. Choose `Connect Codex` and complete sign-in, then press `Refresh`.
-3. Make sure Codex CLI is installed in `/opt/homebrew/bin` or `/usr/local/bin`.
+3. Check the **Codex CLI** path in AI Usage. Automatic detection checks
+   `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, and installed versions
+   under `~/.nvm/versions/node` (newest version containing Codex first). It does
+   not run shell startup files or read NVM aliases. For another location or a
+   custom NVM directory, choose **Choose CLI…** and select the `codex` executable
+   (use Command-Shift-G in the picker to enter a path). **Use Automatic** clears
+   the selection. A saved selection is shared with background refresh; if that
+   executable is removed, select its replacement or return to automatic mode.
+   No administrator access or system symlink is required.
 4. Rebuild and reinstall:
 
 ```sh

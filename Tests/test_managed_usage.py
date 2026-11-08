@@ -64,6 +64,55 @@ struct Checks {
             try Data(scenario.utf8).write(to: home.appendingPathComponent("scenario"))
             return UsagePaths(codexHome: home, snapshot: home.appendingPathComponent("widget/codex-usage.json"))
         }
+        // Discovery must work with a GUI's minimal PATH, without running a shell.
+        let discoveryHome = root.appendingPathComponent("discovery home")
+        let settings = discoveryHome.appendingPathComponent("cli.json")
+        func install(_ relative: String) throws -> URL {
+            let url = discoveryHome.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: executable, to: url)
+            return url
+        }
+        let older = try install(".nvm/versions/node/v9.9.0/bin/codex")
+        let newer = try install(".nvm/versions/node/v26.12.1/bin/codex")
+        check(try CodexExecutable.resolve(settings: settings, home: discoveryHome, systemPaths: []).path == newer.path,
+              "GUI discovers newest NVM version numerically")
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: newer.path)
+        check(try CodexExecutable.resolve(settings: settings, home: discoveryHome, systemPaths: []).path == older.path,
+              "nonexecutable candidates skipped")
+        let local = try install(".local/bin/codex")
+        check(try CodexExecutable.resolve(settings: settings, home: discoveryHome, systemPaths: []).path == local.path,
+              "local install takes precedence over NVM fallback")
+        let preferred = try install("custom bin/codex")
+        try CodexExecutable.save(preferred, to: settings)
+        check(try CodexExecutable.resolve(settings: settings, home: discoveryHome, systemPaths: []).path == preferred.path,
+              "manual selection persists across resolver calls")
+        // npm CLIs use /usr/bin/env: the selected bin directory must reach the child.
+        let envServer = try String(contentsOf: preferred, encoding: .utf8)
+            .replacingOccurrences(of: "#!/usr/bin/python3", with: "#!/usr/bin/env ai-usage-test-python")
+        try envServer.write(to: preferred, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: preferred.path)
+        let interpreter = preferred.deletingLastPathComponent().appendingPathComponent("ai-usage-test-python")
+        try "#!/bin/sh\nexec /usr/bin/python3 \"$@\"\n".write(to: interpreter, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: interpreter.path)
+        let selected = try paths("ready")
+        try CodexExecutable.save(preferred, to: selected.executableSettings)
+        try UsageWorker.run(action: "refresh", paths: selected)
+        check(UsageSnapshot.read(from: selected.snapshot).state == .ready, "worker uses saved CLI selection")
+        try FileManager.default.removeItem(at: preferred)
+        do {
+            _ = try CodexExecutable.resolve(settings: settings, home: discoveryHome, systemPaths: [])
+            fatalError("silently ignored missing manual executable")
+        } catch UsageFailure.missingCodex { }
+        try CodexExecutable.save(nil, to: settings)
+        check(try CodexExecutable.resolve(settings: settings, home: discoveryHome, systemPaths: []).path == local.path,
+              "automatic mode clears saved override")
+        try FileManager.default.removeItem(at: local)
+        try FileManager.default.removeItem(at: older)
+        do {
+            _ = try CodexExecutable.resolve(settings: settings, home: discoveryHome, systemPaths: [])
+            fatalError("accepted missing CLI")
+        } catch UsageFailure.missingCodex { }
         for value: Any in [true, -1, 101, 1e100, 1.5] {
             let parsed = CodexLimitsParser.parseLimits(from: ["rateLimits": ["primary": ["usedPercent": value]]])
             check(parsed.windows.isEmpty, "invalid percentages rejected")

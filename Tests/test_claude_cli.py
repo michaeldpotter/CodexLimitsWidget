@@ -5,6 +5,8 @@ import unittest
 import tempfile
 import time
 import os
+import json
+import subprocess
 
 spec = importlib.util.spec_from_file_location('collector', Path(__file__).resolve().parents[1] / 'Scripts/claude-usage.py')
 c = importlib.util.module_from_spec(spec)
@@ -35,6 +37,51 @@ class Checks(unittest.TestCase):
             with self.assertRaises(TimeoutError):
                 c.fetch(Path(directory), str(executable), timeout=.3)
             self.assertLess(time.monotonic() - start, 5)
+
+    def test_subscription_plan_from_cli_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'fake-claude'
+            for status, expected in [
+                ({'loggedIn': True, 'subscriptionType': 'team', 'email': 'not-for-snapshot'}, 'team'),
+                ({'loggedIn': True, 'subscriptionType': 'pro'}, 'pro'),
+                ({'loggedIn': True, 'subscriptionType': 'max'}, 'max'),
+                ({'loggedIn': True, 'subscriptionType': 'enterprise'}, 'enterprise'),
+                ({'loggedIn': False, 'subscriptionType': 'pro'}, None),
+                ({'loggedIn': True, 'subscriptionType': 'unknown'}, None),
+                ({'loggedIn': True, 'subscriptionType': {'name': 'pro'}}, None),
+                ({}, None),
+            ]:
+                executable.write_text('#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==["auth","status","--json"]\nprint(' + repr(json.dumps(status)) + ')\n')
+                executable.chmod(0o700)
+                self.assertEqual(c.subscription_plan(str(executable)), expected)
+            executable.write_text('#!/bin/sh\nprintf "invalid json"\n')
+            self.assertIsNone(c.subscription_plan(str(executable)))
+            executable.write_text('#!/bin/sh\nexit 1\n')
+            self.assertIsNone(c.subscription_plan(str(executable)))
+
+    def test_collector_saves_plan_without_account_details(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            executable = home / '.local/bin/claude'
+            executable.parent.mkdir(parents=True)
+            executable.write_text(
+                '#!/usr/bin/python3\nimport sys,time,json\n'
+                'if sys.argv[1:]==["auth","status","--json"]:\n'
+                ' print(json.dumps({"loggedIn":True,"subscriptionType":"team","email":"private@example.invalid"}));sys.exit()\n'
+                'print("\\n$",flush=True)\nassert input().strip()=="/usage"\n'
+                'print("Refreshing…",flush=True)\ntime.sleep(.2)\n'
+                'print("\\x1b[2J\\x1b[H"+' + repr(DISPLAY) + ',flush=True)\ntime.sleep(20)\n')
+            executable.chmod(0o700)
+            destination = home / 'snapshot.json'
+            result = subprocess.run(['/usr/bin/python3', str(Path(c.__file__)), str(destination), 'refresh'],
+                                    env={**os.environ, 'HOME': str(home)}, capture_output=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr.decode())
+            saved = json.loads(destination.read_text())
+            self.assertEqual(saved['plan'], 'team')
+            self.assertIn('fiveHour', saved)
+            self.assertIn('sevenDay', saved)
+            self.assertNotIn('private@example.invalid', destination.read_text())
+            self.assertNotIn('email', saved)
 
     def test_windows(self):
         result = c.parse_screen(DISPLAY, 1790211600)

@@ -108,6 +108,19 @@ struct HostView: View {
                 Button("Disconnect") { refresh.disconnect() }
             }
             .disabled(refresh.isRefreshing)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Codex CLI").font(.caption.weight(.semibold))
+                Text(refresh.cliPath)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Choose CLI…") { refresh.chooseCLI() }
+                    Button("Use Automatic") { refresh.useAutomaticCLI() }
+                }
+                .disabled(refresh.isRefreshing)
+            }
             Toggle("Update in the background", isOn: Binding(
                 get: { refresh.backgroundEnabled },
                 set: { refresh.setBackground($0) }
@@ -137,17 +150,57 @@ final class UsageRefreshController: ObservableObject {
     @Published var backgroundEnabled = false
     @Published var backgroundNeedsApproval = false
     @Published var backgroundStatus = ""
+    @Published var cliPath = "Searching for Codex CLI…"
     let backgroundAvailable = Bundle.main.object(forInfoDictionaryKey: "AIUsageBackgroundEnabledBuild") as? Bool == true
     private let service = SMAppService.agent(plistName: "com.pugalol.aiusage.refresh.plist")
     private var timer: Timer?
 
     init() {
         updateStatus()
+        updateCLIPath()
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, !self.isRefreshing else { return }
                 self.updateBackgroundStatus()
             }
+        }
+    }
+
+    private func updateCLIPath() {
+        do {
+            let paths = try UsagePaths(appURL: Bundle.main.bundleURL)
+            let manual = try CodexExecutable.savedPath(at: paths.executableSettings)
+            let executable = try CodexExecutable.resolve(settings: paths.executableSettings)
+            cliPath = "\(manual == nil ? "Automatic" : "Selected"): \(executable.path)"
+        } catch {
+            cliPath = "Codex CLI not found. Choose its executable or install Codex CLI."
+        }
+    }
+
+    func chooseCLI() {
+        guard !isRefreshing else { return }
+        let panel = NSOpenPanel()
+        panel.title = "Choose Codex CLI"
+        panel.message = "Select the codex executable from your installation."
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        if panel.runModal() == .OK, let url = panel.url { setCLI(url) }
+    }
+
+    func useAutomaticCLI() {
+        guard !isRefreshing else { return }
+        setCLI(nil)
+    }
+
+    private func setCLI(_ url: URL?) {
+        do {
+            let paths = try UsagePaths(appURL: Bundle.main.bundleURL)
+            try CodexExecutable.save(url, to: paths.executableSettings)
+            updateCLIPath()
+            status = "Codex CLI setting saved. Connect or refresh to continue."
+        } catch {
+            status = "Could not save the CLI setting. Select an executable file and check file access."
         }
     }
 
@@ -205,6 +258,7 @@ final class UsageRefreshController: ObservableObject {
 
     func perform(_ action: String) {
         guard !isRefreshing else { return }
+        updateCLIPath()
         isRefreshing = true
         status = action == "connect" ? "Complete sign-in in your browser…" : "Updating Codex…"
         let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/AIUsageHelper")

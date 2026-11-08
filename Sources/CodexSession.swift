@@ -17,13 +17,12 @@ final class CodexSession {
         Darwin.signal(SIGPIPE, SIG_IGN)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true,
                                                attributes: [.posixPermissions: 0o700])
-        let candidates = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"]
-        guard let path = executable?.path ?? candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
-        else { throw UsageFailure.missingCodex }
-        process.executableURL = URL(fileURLWithPath: path)
+        let settings = home.deletingLastPathComponent().appendingPathComponent("codex-cli.json")
+        let cli = try executable ?? CodexExecutable.resolve(settings: settings)
+        process.executableURL = cli
         process.arguments = ["-c", "cli_auth_credentials_store=\"keyring\"", "app-server", "--listen", "stdio://"]
         // Do not inherit API keys, auth overrides, or the user's Codex configuration.
-        var environment = ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin", "CODEX_HOME": home.path,
+        var environment = ["PATH": cli.deletingLastPathComponent().path + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin", "CODEX_HOME": home.path,
                            "HOME": FileManager.default.homeDirectoryForCurrentUser.path]
         for key in ["USER", "LOGNAME", "TMPDIR"] { environment[key] = ProcessInfo.processInfo.environment[key] }
         process.environment = environment

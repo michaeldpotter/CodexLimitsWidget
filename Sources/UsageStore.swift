@@ -48,6 +48,7 @@ struct UsageSnapshot: Codable {
 struct UsagePaths {
     let codexHome: URL
     let snapshot: URL
+    var executableSettings: URL { codexHome.deletingLastPathComponent().appendingPathComponent("codex-cli.json") }
     var legacyAuth: URL { snapshot.deletingLastPathComponent().appendingPathComponent("external-auth.json") }
 
     init(appURL: URL) throws {
@@ -79,5 +80,52 @@ enum CodexLimitsReader {
     static func read() -> CodexLimits {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return UsageSnapshot.read(from: directory.appendingPathComponent("CodexLimits/codex-usage.json")).displayLimits()
+    }
+}
+
+// Shared by the host and helper; discovery never executes shell startup files.
+enum CodexExecutable {
+    static let systemPaths = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"]
+
+    static func savedPath(at settings: URL) throws -> String? {
+        guard FileManager.default.fileExists(atPath: settings.path) else { return nil }
+        let data = try Data(contentsOf: settings)
+        guard data.count <= 16_384 else { throw UsageFailure.configuration }
+        return try JSONDecoder().decode(String.self, from: data)
+    }
+
+    static func save(_ executable: URL?, to settings: URL) throws {
+        guard let executable else {
+            if FileManager.default.fileExists(atPath: settings.path) {
+                try FileManager.default.removeItem(at: settings)
+            }
+            return
+        }
+        guard isExecutable(executable.path) else { throw UsageFailure.missingCodex }
+        try FileManager.default.createDirectory(at: settings.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(executable.path).write(to: settings, options: .atomic)
+    }
+
+    static func resolve(settings: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser,
+                        systemPaths: [String] = systemPaths) throws -> URL {
+        if let selected = try savedPath(at: settings) {
+            guard selected.hasPrefix("/"), isExecutable(selected) else { throw UsageFailure.missingCodex }
+            return URL(fileURLWithPath: selected)
+        }
+        var candidates = systemPaths + [home.appendingPathComponent(".local/bin/codex").path]
+        let versions = home.appendingPathComponent(".nvm/versions/node")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: versions.path)) ?? []
+        // Prefer the newest installed release; NVM's shell aliases are not sourced.
+        let releases = names.filter { $0.range(of: #"^v[0-9]+\.[0-9]+\.[0-9]+$"#, options: .regularExpression) != nil }
+            .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+        candidates += releases.map { versions.appendingPathComponent("\($0)/bin/codex").path }
+        guard let path = candidates.first(where: isExecutable) else { throw UsageFailure.missingCodex }
+        return URL(fileURLWithPath: path)
+    }
+
+    private static func isExecutable(_ path: String) -> Bool {
+        var directory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &directory) && !directory.boolValue
+            && FileManager.default.isExecutableFile(atPath: path)
     }
 }
